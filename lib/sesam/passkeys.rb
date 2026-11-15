@@ -12,6 +12,9 @@ module Sesam
     # for the device, the one thing in a record they can act on ("which
     # of these is the phone I lost").
     class Passkeys
+        # A credential id another user holds.
+        class Error < Sesam::Error; end
+
         Registered = Data.define(:id, :user, :public_key, :sign_count,
                                  :label, :created_at)
 
@@ -33,9 +36,15 @@ module Sesam
         # Whose credential `id` is, or nil.
         def owner_of(id) = rows.where(id: id.to_s).get(:user)
 
-        # Registered again, an id replaces its record.
+        # Registered again by its owner, an id replaces its record;
+        # Error for one another user holds (WebAuthn: a credential id is
+        # refused when already registered), which would take theirs.
         def add(name, id:, public_key:, sign_count:, label:)
             @db.transaction do
+                held = owner_of(id)
+                if held && held != name.to_s
+                    raise Error, "credential #{id} is another user's"
+                end
                 rows.where(id:).delete
                 rows.insert(id:, user: name, public_key:,
                             sign_count: sign_count.to_i, label:,

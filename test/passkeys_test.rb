@@ -24,16 +24,24 @@ class PasskeysTest < Minitest::Test
         assert_equal 1, @keys.of("alice").size
     end
 
-    # Registered again, an id replaces its record, whoever held it.
+    # Registered again by its owner, an id replaces its record.
     def test_registered_again_an_id_replaces_its_record
-        @keys.add("bob", id: "c1", public_key: "pk2", sign_count: 0,
-                         label: "tablet")
-        assert_equal "bob", @keys.owner_of("c1")
-        assert_empty @keys.of("alice")
+        @keys.add("alice", id: "c1", public_key: "pk2", sign_count: 0,
+                           label: "tablet")
+        assert_equal ["tablet"], @keys.of("alice").map(&:label)
     end
 
     def test_an_assertion_records_the_counter
         @keys.seen("alice", "c1", 7)
         assert_equal 7, @keys.find("alice", "c1").sign_count
+    end
+
+    # A credential id is one user's: another's registration is refused.
+    def test_an_id_held_by_another_is_refused
+        assert_raises(Sesam::Passkeys::Error) do
+            @keys.add("bruno", id: "c1", public_key: "pk2", sign_count: 0,
+                               label: "tablet")
+        end
+        assert_equal "alice", @keys.owner_of("c1")
     end
 end

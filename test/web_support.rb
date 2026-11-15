@@ -101,9 +101,18 @@ module WebSupport
                 set :host_authorization, { permitted_hosts: [] }
                 set :show_exceptions, false
                 set :raise_errors, true
-                before { admit! unless sesam_open? }
+                TestApp.gate(self)
                 get("/secret") { answer({ who: }) }
                 TestApp.hooks(self, told, profiles)
+            end
+        end
+
+        # The gate as an application sets it: cross-site writes, then
+        # who is calling, but on the routes open to all.
+        def self.gate(app)
+            app.before do
+                same_site!
+                admit! unless sesam_open?
             end
         end
 

@@ -12,7 +12,8 @@ module Sesam
     # SHA-256 of 256 random bits, so the lookup tells a guesser nothing a
     # guess would not.
     class Credential
-        BEARER = /\ABearer\s+(\S+)\z/
+        # The scheme's name is case-insensitive (RFC 7235).
+        BEARER = /\ABearer\s+(\S+)\z/i
 
         def initialize(settings)
             @settings = settings

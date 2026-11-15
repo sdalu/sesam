@@ -19,7 +19,10 @@ module Sesam
                      session: nil, passkey: nil, throttle: nil,
                      reserved: [], app: "sesam" }.freeze
 
+        # ceremonies: the challenges spent (Spent), each until it would
+        # have lapsed.
         attr_reader :accept, :mount, :session, :passkey, :throttle,
+                    :ceremonies,
                     :reserved, :app, :access
 
         # given: DEFAULTS' keys; another is refused. throttle: a
@@ -79,6 +82,7 @@ module Sesam
             @session  = set[:session]
             @throttle = set[:throttle] || Throttle.new(window: 900)
             @passkey  = passkey_of(set[:passkey])
+            @ceremonies = Spent.new(window: Session::CEREMONY)
         end
 
         def settings!(given)

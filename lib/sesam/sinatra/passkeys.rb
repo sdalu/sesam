@@ -133,14 +133,17 @@ module Sesam
                     )
                 end
 
-                # The challenge, spent: dropped whatever the answer.
+                # The challenge, spent: dropped whatever the answer, and
+                # remembered as spent, so that the same cookie sent again
+                # finds none.
                 def recalled!
                     session = sesam.session
                     challenge = session.challenge_from(request.env)
                     response.set_cookie(session.ceremony,
                                         session.forget(sesam.mount))
-                    challenge || refuse(422, "the ceremony expired: start " \
-                                             "again")
+                    return challenge if challenge &&
+                                        sesam.ceremonies.spend!(challenge)
+                    refuse(422, "the ceremony expired: start again")
                 end
             end
         end

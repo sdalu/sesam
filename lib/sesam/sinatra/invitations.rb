@@ -40,9 +40,7 @@ module Sesam
                 # open); signs no one in.
                 def invitation_redeem
                     passwords!
-                    password = session_body["password"]
-                    refuse(422, "password: needed", "password") unless
-                        password.is_a?(String)
+                    password = new_password
                     name = redeemed do |db, user|
                         sesam.users_in(db).password!(user, password)
                     end

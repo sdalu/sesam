@@ -20,6 +20,17 @@ module Sesam
                             "Authorization: Bearer KEY")
             end
 
+            # A write a browser says comes from another site (its
+            # Sec-Fetch-Site, which no page can set) is refused (403), open
+            # route or not: a page elsewhere must not drive a LAN browser
+            # into acting, nor sign it in as someone else. A program sends
+            # no such header and passes.
+            def same_site!
+                return if request.get? || request.head? || request.options?
+                return unless request.env["HTTP_SEC_FETCH_SITE"] == "cross-site"
+                refuse(403, "a write from another site is refused")
+            end
+
             def sesam_open?
                 OPEN.include?([request.request_method, request.path_info])
             end

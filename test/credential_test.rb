@@ -40,4 +40,10 @@ class CredentialTest < Minitest::Test
         assert_nil named(cookie_env("bruno"))
         assert_nil named(cookie_env("carol"))
     end
+
+    # An auth scheme's name is case-insensitive (RFC 7235).
+    def test_the_scheme_is_read_whatever_its_case
+        assert_equal "alice", named(bearer("bearer #{ALICE}"))
+        assert_equal "alice", named(bearer("BEARER #{ALICE}"))
+    end
 end

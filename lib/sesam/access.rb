@@ -61,9 +61,10 @@ module Sesam
         # one is a proxy, the leftmost, which is never admitted on the
         # LAN.
         def client(env)
-            peer = env[PEER].to_s
+            peer = Networks.canonical(env[PEER])
             return peer unless @settings.proxy?(peer)
             hops = Forwarded.fors(env["HTTP_FORWARDED"])
+                            .map { Networks.canonical(it) }
             hops.reverse.find { !@settings.proxy?(it) } || hops.first || peer
         end
 

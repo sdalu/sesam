@@ -30,7 +30,11 @@ later), checked by whoever reads the session.
 A passkey ceremony is two requests, and the challenge must reach the
 second before any session exists: it rides in a cookie signed the same
 way, for five minutes. A challenge nobody can forge is as safe held
-by the client.
+by the client, but not spent by it: dropping the cookie spends it
+for an honest browser only, so the server also remembers each
+challenge spent (Spent, in memory as Throttle) until it would have
+lapsed. A synced passkey's counter stays at 0 and cannot tell a
+replay.
 
 The format is ClimatControl's, byte for byte (test/session_test.rb
 pins it), so that its sessions survive the move; the cookies' names
@@ -93,6 +97,21 @@ where the application mounts its API.
 The application's name (`app`) names what a client sees of it: the
 realm of a 401, the header listing the ways in, the env key of its
 own requests; the cookies' names are the Session's.
+
+## A refusal raises, and a write states its origin
+
+A refusal is an exception (`Refused`), not Sinatra's `halt`: a halt is
+a throw, and Sequel commits a transaction a throw leaves, so an
+invitation spent inside one would stay spent behind a 422. An
+application's own `refuse` must raise as well.
+
+A browser posts `text/plain` to any site without asking, and can make
+it a JSON text: so a body is JSON only when it says so (415 else), the
+kind a foreign page can send only after a preflight it does not pass;
+and a write a browser marks `Sec-Fetch-Site: cross-site` is refused
+before anything else. The header is the browser's, not the page's, and
+needs no list of the application's own names, which behind proxies the
+request itself cannot give.
 
 ## Forwarded, not X-Forwarded-For
 

@@ -26,12 +26,24 @@ module Sesam
         end
 
         def include?(address)
-            ip = IPAddr.new(address.to_s)
+            ip = Networks.native(IPAddr.new(address.to_s))
             @list.any? { it.include?(ip) }
         rescue IPAddr::Error
             false
         end
 
         def to_a = @list
+
+        # An IPv4 address a dual-stack socket reports as ::ffff:a.b.c.d,
+        # as itself.
+        def self.native(ip) = ip.ipv4_mapped? ? ip.native : ip
+
+        # `address` written as Networks compares it: a mapped IPv4 as its
+        # IPv4; anything that is no address, as given.
+        def self.canonical(address)
+            native(IPAddr.new(address.to_s)).to_s
+        rescue IPAddr::Error
+            address.to_s
+        end
     end
 end

@@ -166,7 +166,10 @@ accepted, a query string never); a LAN caller, named for the user
 known at that address if any (a name, not a proof); a request carrying
 `app.internal` in its env, which no HTTP request can set; else
 refused. Behind `proxies` the caller is the rightmost Forwarded hop
-that is no proxy; X-Forwarded-For is never read.
+that is no proxy; X-Forwarded-For is never read. An IPv4 address a
+dual-stack socket reports as `::ffff:a.b.c.d` is that IPv4 address,
+for the networks and the throttle alike. The Bearer scheme is read
+whatever its case.
 
 ## The routes
 
@@ -176,12 +179,19 @@ require "sesam/sinatra"
 class App < Sinatra::Base
     register Sesam::Sinatra
     set :sesam, SESAM
-    before { admit! unless sesam_open? }
+    before do
+        same_site!
+        admit! unless sesam_open?
+    end
     get("/secret") { answer({ who: }) }
 end
 ```
 
-`admit!` refuses an unknown caller with a 401, `WWW-Authenticate:
+`same_site!` refuses (403) a write the browser says comes from another
+site (`Sec-Fetch-Site: cross-site`, which no page can set), on every
+route, open or not: a page elsewhere must not drive a LAN browser into
+acting, nor sign it in as someone else. A program sends no such header
+and passes. `admit!` refuses an unknown caller with a 401, `WWW-Authenticate:
 Bearer realm="app"` and `X-App-Sign-In` listing the browser's ways in
 (`password passkey`, empty for none); `who` is the caller's name.
 
@@ -197,6 +207,12 @@ Bearer realm="app"` and `X-App-Sign-In` listing the browser's ways in
 | `POST /session/invite` | yes | spends it on a password; other sessions end |
 | `POST /session/invite/challenge`, `POST /session/invite/passkey` | yes | spends it on a passkey |
 
+A ceremony's challenge is spent once, remembered as spent until it
+would have lapsed, so an answer sent again with its cookie is refused.
+A credential id is one user's: a registration offering another user's
+is refused (422), theirs kept. Whatever refuses an invitation's
+password or passkey leaves the invitation open.
+
 Bodies are JSON (`name`, `password`, `current`, `token`, `credential`,
 `label`). Failed sign-ins are counted by name and address (5) and by
 address (20), failed invitation lookups by address (20), over the
@@ -209,8 +225,8 @@ registering sesam; sesam's own fills only what is missing:
 | Helper | Default | Called |
 |---|---|---|
 | `answer(data)` | `{"data": …}` | every answer |
-| `refuse(status, message, field = nil)` | halts with `{"error", "field"}` | every refusal |
-| `parsed_body` | the JSON object, 422 for another | reading a body |
+| `refuse(status, message, field = nil)` | raises `Sesam::Sinatra::Refused`, answered `{"error", "field"}`; an application's own must raise too, never `halt`, or a refusal inside a transaction commits it | every refusal |
+| `parsed_body` | the JSON object; 415 for a body not said `application/json`, 422 for one that is no object | reading a body |
 | `sesam_changed(name, db)` | nothing | in the transaction where a user's way in changed |
 | `sesam_notify(name, kind)` | nothing | after it, `:password` or `:passkey` |
 | `sesam_profile(name)` | `{}` | merged into `GET /session` and the invitation check |

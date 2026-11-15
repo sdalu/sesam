@@ -4,20 +4,53 @@ require "json"
 
 module Sesam
     module Sinatra
-        # How the routes answer where the application says nothing: JSON,
-        # { data } on success, { error, field } on a refusal.
-        module Replies
-            def answer(data) = JSON.generate({ data: })
+        # A refusal decided by a route, raised rather than halted: an
+        # exception rolls back the transaction it crosses (an invitation
+        # stays open), where Sinatra's halt, a throw, would commit it.
+        # http_status keeps Sinatra from raising it on in tests.
+        class Refused < StandardError
+            attr_reader :status, :field
 
-            def refuse(status, message, field = nil)
-                halt status, JSON.generate({ error: message,
-                                             field: field&.to_s })
+            def initialize(status, message, field = nil)
+                super(message)
+                @status = status
+                @field  = field&.to_s
             end
 
-            # The request's JSON object, {} for none.
+            def http_status = @status
+        end
+
+        # How the routes answer where the application says nothing: JSON,
+        # { data } on success, { error, field } on a refusal, both sent
+        # as application/json rather than Sinatra's text/html default.
+        module Replies
+            def answer(data)
+                content_type :json
+                JSON.generate({ data: })
+            end
+
+            def refuse(status, message, field = nil)
+                raise Refused.new(status, message, field)
+            end
+
+            # What a Refused answers (Sesam::Sinatra.registered).
+            def refusal(failed)
+                content_type :json
+                status failed.status
+                JSON.generate({ error: failed.message, field: failed.field })
+            end
+
+            # The request's JSON object, {} for none; a body is JSON, said
+            # so (415 else): a page elsewhere can make a browser post
+            # text/plain without a preflight, application/json only after
+            # one no foreign origin passes.
             def parsed_body
                 text = request.body.read.to_s
-                body = text.strip.empty? ? {} : JSON.parse(text)
+                return {} if text.strip.empty?
+                unless request.media_type == "application/json"
+                    refuse(415, "body: Content-Type application/json", "body")
+                end
+                body = JSON.parse(text)
                 return body if body.is_a?(Hash)
                 refuse(422, "body: a JSON object", "body")
             rescue JSON::ParserError

@@ -5,6 +5,7 @@ require "sesam/password"
 require "sesam/session"
 require "sesam/forwarded"
 require "sesam/throttle"
+require "sesam/spent"
 
 # Who may use a small Rack application, and how they prove it
 # (README.md): passwords kept as scrypt hashes, sessions as signed

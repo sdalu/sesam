@@ -62,6 +62,15 @@ class AccessForwardedTest < Minitest::Test
         assert_predicate access.caller_for(env), :refused?
     end
 
+    # A dual-stack socket reports an IPv4 peer as ::ffff:a.b.c.d: the
+    # same address, trusted and counted as such.
+    def test_a_mapped_address_is_its_ipv4_one
+        env = from("::ffff:#{LOCAL}", "HTTP_FORWARDED" => "for=#{PHONE}")
+        assert_equal PHONE, access.client(env)
+        assert_equal "lan:#{PHONE}", access.caller_for(env).name
+        assert_equal "192.0.2.9", access.client(from("::ffff:192.0.2.9"))
+    end
+
     private
 
     # A request from the local proxy bearing the hops given.

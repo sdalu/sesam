@@ -72,6 +72,29 @@ class GateTest < Minitest::Test
         assert_equal "passwords are not offered here", reply["error"]
     end
 
+    # A body is JSON, said so: a page elsewhere can make a browser post
+    # text/plain without a preflight, application/json only after one.
+    def test_a_body_not_said_json_is_refused
+        users.password!("alice", PASSWORD)
+        assert_equal 415, call(:post, "/session/password",
+                               { name: "alice", password: PASSWORD },
+                               "CONTENT_TYPE" => "text/plain")
+        assert_nil last_response.headers["Set-Cookie"]
+    end
+
+    # A write a browser says comes from another site is refused, open
+    # route or not; a program sends no such header and passes.
+    def test_a_cross_site_write_is_refused
+        users.password!("alice", PASSWORD)
+        cross = { "HTTP_SEC_FETCH_SITE" => "cross-site" }
+        assert_equal 403, call(:post, "/session/password",
+                               { name: "alice", password: PASSWORD }, **cross)
+        assert_equal 200, call(:get, "/secret", peer: LAN, **cross)
+        assert_equal 200, call(:post, "/session/password",
+                               { name: "alice", password: PASSWORD },
+                               "HTTP_SEC_FETCH_SITE" => "same-site")
+    end
+
     private
 
     def sign_in(password, name: "alice", peer: WAN)

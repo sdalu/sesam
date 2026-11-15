@@ -47,7 +47,7 @@ module Sesam
                 def password_change
                     passwords!
                     name = named!
-                    changed_password(name, session_body["password"])
+                    changed_password(name, new_password)
                     signed_in!(name)
                     sesam_notify(name, :password)
                     answer({ name: })
@@ -86,6 +86,13 @@ module Sesam
                 end
 
                 def token = session_body["token"].to_s
+
+                # The password the body gives, text; 422 else.
+                def new_password
+                    password = session_body["password"]
+                    return password if password.is_a?(String)
+                    refuse(422, "password: needed", "password")
+                end
 
                 # The body, read once: a stream reads once.
                 def session_body = @session_body ||= parsed_body

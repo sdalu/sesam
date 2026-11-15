@@ -109,6 +109,15 @@ class SessionsTest < Minitest::Test
         assert_equal 401, call(:get, "/secret")
     end
 
+    # A password is text: anything else is refused, as an invitation does.
+    def test_a_password_changed_to_no_text_is_refused
+        signed_in_as_alice
+        assert_equal 422, call(:put, "/session/password",
+                               { current: PASSWORD,
+                                 password: { "a" => 1_234_567 } })
+        assert users.password_match?("alice", PASSWORD)
+    end
+
     private
 
     # The clock a second on, as a session issued now and one after would

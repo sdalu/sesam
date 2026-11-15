@@ -18,10 +18,12 @@ require "sesam/sinatra/invitations"
 module Sesam
     # The sign-in routes and the gate's helpers, as a Sinatra extension:
     # `register Sesam::Sinatra` in the application, `set :sesam,` its
-    # Settings, and `admit! unless sesam_open?` in a before filter.
+    # Settings, and `same_site!` then `admit! unless sesam_open?` in a
+    # before filter.
     #
     # What the application may define, else sesam's default is used
-    # (Replies, Hooks): `answer`, `refuse`, `parsed_body`, and the hooks
+    # (Replies, Hooks): `answer`, `refuse` (raising: a refusal must roll
+    # back the transaction it crosses), `parsed_body`, and the hooks
     # `sesam_changed(name, db)` (in the transaction where a user changed
     # their way in), `sesam_notify(name, kind)` (after it, :password or
     # :passkey) and `sesam_profile(name)` (a Hash merged into what
@@ -40,6 +42,7 @@ module Sesam
             app.set :sesam, nil unless app.respond_to?(:sesam)
             app.helpers(missing(app, Replies), missing(app, Hooks))
             app.helpers Gate
+            app.error(Refused) { refusal(env["sinatra.error"]) }
             [Sessions, Passkeys, Invitations].each { app.register it }
         end
 

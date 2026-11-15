@@ -23,6 +23,17 @@ class ExtensionTest < Minitest::Test
         assert_equal({}, app.new!.sesam_profile("alice"))
     end
 
+    # Neither /secret nor its gate defines its own answer or refuse, so
+    # both must carry sesam's own Content-Type, not Sinatra's text/html
+    # default for an untyped body.
+    def test_default_replies_are_json
+        assert_equal 200, call(:get, "/secret", peer: LAN)
+        assert_match(%r{\Aapplication/json}, last_response.content_type)
+
+        assert_equal 401, call(:get, "/secret")
+        assert_match(%r{\Aapplication/json}, last_response.content_type)
+    end
+
     def test_one_defined_after_registering_wins
         later = Class.new(Sinatra::Base) do
             register Sesam::Sinatra

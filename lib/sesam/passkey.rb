@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "base64"
+require "json"
 require "openssl"
 require "uri"
 
@@ -36,6 +37,10 @@ module Sesam
 
         # An origin: https and a host, else http on localhost, which
         # browsers count as secure; no path.
+        # What an answer the gem cannot read raises.
+        UNREADABLE = [ArgumentError, TypeError, NoMethodError, KeyError,
+                      JSON::ParserError].freeze
+
         ORIGIN = %r{\A(?:https://[^/\s:]+|http://localhost)(?::\d+)?\z}
 
         # `given` as an origin, a trailing slash taken off; Error for
@@ -92,7 +97,7 @@ module Sesam
                            sign_count: verified.sign_count,
                            label: Passkey.label(label))
             verified.id
-        rescue ArgumentError, TypeError, NoMethodError, KeyError => e
+        rescue *UNREADABLE, Passkeys::Error => e
             raise WebAuthn::Error, "unreadable answer (#{e.class})"
         end
 
@@ -112,7 +117,7 @@ module Sesam
             name, verified = verify(credential, challenge, keys)
             keys.seen(name, verified.id, verified.sign_count)
             name
-        rescue WebAuthn::Error, ArgumentError, TypeError, NoMethodError
+        rescue WebAuthn::Error, *UNREADABLE
             nil
         end
 
