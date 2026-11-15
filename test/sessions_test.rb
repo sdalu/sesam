@@ -23,6 +23,17 @@ class SessionsTest < Minitest::Test
 
     # Spent once on a password, which signs no one in; the application
     # told in the transaction, then notified.
+    # A profile never speaks for sesam: one naming a key of sesam's
+    # own (a display name as `name`) is refused rather than shown.
+    def test_a_profile_cannot_replace_sesam_s_keys
+        token = users.invite("alice")
+        @profiles["alice"] = { name: "Alice Dupont" }
+        error = assert_raises(Sesam::Error) do
+            call(:post, "/session/invite/check", { token: })
+        end
+        assert_match(/sesam_profile.*name/, error.message)
+    end
+
     def test_an_invitation_spent_with_a_password
         token = users.invite("alice")
         assert_equal 200, call(:post, "/session/invite",

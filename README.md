@@ -448,7 +448,8 @@ registering sesam; sesam's own fills only what is missing:
 - `sesam_notify(name, kind)`: after it, `:password` or `:passkey`; by
   default nothing.
 - `sesam_profile(name)`: merged into `GET /session` and the invitation
-  check; by default `{}`.
+  check; by default `{}`. A key of sesam's own there (`name`, `via`,
+  `password`…) raises `Sesam::Error` rather than replace it.
 - `sesam_named(text)`: a link asked for: the user `text` names besides a
   login (an email address); by default `nil`.
 - `sesam_reached?(name, token)`: a link asked for: hand the invitation

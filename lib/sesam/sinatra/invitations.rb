@@ -30,10 +30,11 @@ module Sesam
                 def invitation_read
                     invite = invited!
                     password = sesam.with_users { it.password?(invite.user) }
-                    answer({ name: invite.user, **sesam_profile(invite.user),
-                             expires_at: invite.expires_at, password:,
-                             origin: sesam.passkey&.origin,
-                             sign_in: sesam.accept.sign_in })
+                    answer(profiled(invite.user,
+                                    { name: invite.user,
+                                      expires_at: invite.expires_at, password:,
+                                      origin: sesam.passkey&.origin,
+                                      sign_in: sesam.accept.sign_in }))
                 end
 
                 # Spends the invitation on a password (refused, it stays

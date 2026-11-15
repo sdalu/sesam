@@ -102,7 +102,10 @@ sesam builds Users and Passkeys on what it is given, with the
 reserved names. The application's part of a change (an audit row)
 needs the request, so it is a helper (`sesam_changed`), not a
 callable in the settings, and it runs inside the change's transaction
-so that one is kept only with the other.
+so that one is kept only with the other. A profile (`sesam_profile`)
+is merged beside sesam's answer and never over it: one naming a key
+of sesam's raises, since a display name answered as `name` would
+pass for the login.
 
 An application's helpers are its own: sesam fills only the ones it
 lacks, whichever is registered first, so an API with its own

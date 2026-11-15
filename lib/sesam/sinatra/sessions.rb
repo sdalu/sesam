@@ -25,11 +25,11 @@ module Sesam
                 # origin passkeys are bound to (nil: none here), which the
                 # page compares with its own, and the browser's ways in.
                 def whoami
-                    answer({ name: who, via: @caller.verdict.to_s,
-                             **sesam_profile(@caller.user),
-                             password: password_set?,
-                             origin: sesam.passkey&.origin,
-                             sign_in: sesam.accept.sign_in })
+                    answer(profiled(@caller.user,
+                                    { name: who, via: @caller.verdict.to_s,
+                                      password: password_set?,
+                                      origin: sesam.passkey&.origin,
+                                      sign_in: sesam.accept.sign_in }))
                 end
 
                 def password_sign_in
@@ -92,6 +92,18 @@ module Sesam
                     password = session_body["password"]
                     return password if password.is_a?(String)
                     refuse(422, "password: needed", "password")
+                end
+
+                # What sesam says (`ours`), the application's profile of
+                # `name` beside it. A profile naming one of sesam's keys
+                # (a display name as `name`) would speak for sesam: an
+                # error, never an answer.
+                def profiled(name, ours)
+                    profile = sesam_profile(name).to_h
+                    clash = profile.keys.map(&:to_sym) & ours.keys
+                    return ours.merge(profile) if clash.empty?
+                    raise Sesam::Error, "sesam_profile: #{clash.join(", ")} " \
+                                        "is sesam's own key"
                 end
 
                 # The body, read once: a stream reads once.
