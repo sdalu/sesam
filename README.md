@@ -465,7 +465,6 @@ audit) is not there, so they take what they need from the request
 itself. A failure there is said on the server's output.
 
 ## Known shortfalls
-- No release yet: `Sesam::VERSION` is 0.0.0.
 - A link asked for is mailed inside its invitation's transaction (kept
   only if it reached its user), so on SQLite other writers wait for the
   mail, and fail past the busy timeout (Sequel's 5 s by default).
