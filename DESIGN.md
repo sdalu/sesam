@@ -52,6 +52,20 @@ digest tells a guesser nothing a guess would not. Names an
 application keeps for itself (an audit's `root`) are given, not
 built in.
 
+## Passkeys: an optional require
+
+`sesam/passkey` is loaded on its own, and `webauthn` (with its CBOR
+and COSE gems) is not in the gemspec: an application signing in by
+password alone pulls none of it in. Missing, the require says which
+gem to add rather than failing deeper.
+
+The origin is configured, never read from a request: WebAuthn binds a
+credential to the origin the browser sees, and behind a proxy the
+request says what the proxy wrote. Signing in names no credential
+(no allow-list), since listing the accepted credentials would tell
+anybody which users exist; the credential's id says whose it is, and
+only one registered here counts, whatever its signature proves.
+
 ## Forwarded, not X-Forwarded-For
 
 RFC 7239's header names each hop; a client can write only to the left

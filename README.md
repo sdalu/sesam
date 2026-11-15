@@ -10,8 +10,10 @@ Who may use a small Rack application, and how they prove it.
 | `Sesam::Throttle` | failures counted per key over a window, in memory          |
 | `Sesam::Users`    | users by name in a Sequel database: passwords, API keys, single-use invitations, the LAN addresses each is known at, the moment their sessions were ended |
 | `Sesam::Passkeys` | each user's passkeys: the public half of a key pair, by credential id |
+| `Sesam::Passkey`  | the WebAuthn ceremonies, registering and signing in (`require "sesam/passkey"`, with the `webauthn` gem) |
 
-Ruby ≥ 3.4; depends on `rack`, `base64` and `sequel`.
+Ruby ≥ 3.4; depends on `rack`, `base64` and `sequel`; passkeys also
+on `webauthn`, which the application adds to its own Gemfile.
 
 ```ruby
 # Gemfile
@@ -108,9 +110,37 @@ what the block refuses leaves the invitation open. A wrong password
 and an unknown name take the same time, the name checked against a
 decoy hash.
 
+## Passkeys
+
+```ruby
+require "sesam/passkey"   # needs the webauthn gem
+
+passkey = Sesam::Passkey.new("https://app.example.org",
+                             name: "App", handle: "app/")
+keys = Sesam::Passkeys.new(db)
+
+options = passkey.registration_for("alice", keys)  # to the browser
+# ... navigator.credentials.create answers `credential`
+passkey.register!("alice", credential, options.challenge, keys,
+                  label: "phone")
+
+options = passkey.authentication                     # no name asked
+# ... navigator.credentials.get answers `credential`
+passkey.authenticate!(credential, options.challenge, keys)  # => "alice"
+```
+
+The origin is what the browser's address bar shows: `https://HOST`
+with an optional port, or `http://localhost`; anything else is
+refused (`Sesam::Passkey::Error`). `name` is what the browser shows
+when it asks for a finger; each user's handle is derived from
+`handle` and their name, so changing it makes every device register
+a second credential. The challenge between the two calls of a
+ceremony is the caller's to carry (Session#challenge_cookie).
+`authenticate!` answers nil for a signature, challenge, origin or
+credential that is not right, and `register!` raises `WebAuthn::Error`.
+
 ## Known shortfalls
 
-- Passkey ceremonies (WebAuthn) are not here yet, nor the Sinatra
-  layer that admits callers and serves the sign-in routes: both are
-  ClimatControl's still.
+- The Sinatra layer that admits callers and serves the sign-in
+  routes is not here yet: it is ClimatControl's still.
 - No release yet: `Sesam::VERSION` is 0.0.0.

@@ -10,4 +10,6 @@ group :development, :test do
     gem "rubocop", "~> 1.90"
     # The database the tests keep users in, in memory.
     gem "sqlite3", "~> 2.0"
+    # sesam/passkey's relying party, and its fake authenticator.
+    gem "webauthn", "~> 3.4"
 end
