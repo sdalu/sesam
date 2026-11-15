@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "ipaddr"
-
 module Sesam
     # Who may use the application, decided in one place, from the caller
     # (#client): the socket peer (REMOTE_ADDR, which Rack fills from the
@@ -90,11 +88,6 @@ module Sesam
             Caller.new(verdict: :lan, name: user || "lan:#{caller}", user:)
         end
 
-        def address?(text)
-            IPAddr.new(text)
-            true
-        rescue IPAddr::Error
-            false
-        end
+        def address?(text) = !Networks.address(text).nil?
     end
 end

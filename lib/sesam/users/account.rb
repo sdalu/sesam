@@ -65,8 +65,8 @@ module Sesam
 
             def ip_of(address)
                 IPAddr.new(address.to_s).tap do |ip|
-                    raise Error, "one address, not a network: #{address}" if
-                        ip.prefix != (ip.ipv4? ? 32 : 128)
+                    raise Error, "one address, not a network: #{address}" unless
+                        Networks.one?(ip)
                 end
             rescue IPAddr::Error
                 raise Error, "not an IP address: #{address.inspect}"

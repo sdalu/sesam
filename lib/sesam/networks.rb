@@ -26,10 +26,8 @@ module Sesam
         end
 
         def include?(address)
-            ip = Networks.native(IPAddr.new(address.to_s))
+            ip = Networks.address(address) or return false
             @list.any? { it.include?(ip) }
-        rescue IPAddr::Error
-            false
         end
 
         def to_a = @list
@@ -38,12 +36,21 @@ module Sesam
         # as itself.
         def self.native(ip) = ip.ipv4_mapped? ? ip.native : ip
 
-        # `address` written as Networks compares it: a mapped IPv4 as its
-        # IPv4; anything that is no address, as given.
-        def self.canonical(address)
-            native(IPAddr.new(address.to_s)).to_s
+        # `text` as one address (IPAddr, a mapped IPv4 as its IPv4), or
+        # nil: a network is none, since IPAddr would read 10.0.0.0/8 as
+        # 10.0.0.0 once written out.
+        def self.address(text)
+            ip = IPAddr.new(text.to_s)
+            native(ip) if one?(ip)
         rescue IPAddr::Error
-            address.to_s
+            nil
         end
+
+        # Whether `ip` is one address, not a wider network.
+        def self.one?(ip) = ip.prefix == (ip.ipv4? ? 32 : 128)
+
+        # `text` written as Networks compares it: a mapped IPv4 as its
+        # IPv4; anything that is not one address, as given.
+        def self.canonical(text) = address(text)&.to_s || text.to_s
     end
 end
