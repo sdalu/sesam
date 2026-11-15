@@ -81,9 +81,39 @@ class RecoveryTest < Minitest::Test
         assert_equal [[:asked, "alice", true]], asked
     end
 
+    # The answer does not wait for the link: a mail takes its time only
+    # for a user who exists.
+    def test_the_answer_does_not_wait_for_the_link
+        mailed = Thread::Queue.new
+        app.define_method(:sesam_reached?) { |*| mailed.pop(timeout: 5) }
+        assert_equal 202, call(:post, "/session/recover", { who: "alice" })
+        handover = last_request.env[Sesam::Sinatra::Recovery::HANDOVER]
+        assert_instance_of Thread, handover
+        assert_predicate handover, :alive?
+        mailed << true
+        handover.join
+        assert_equal 1, @db[:invites].count
+    end
+
+    # A hand-over that fails is said on the server's output, no link
+    # kept; the answer was given already.
+    def test_a_hand_over_that_fails_is_said
+        app.define_method(:sesam_reached?) { |*| raise IOError, "no mail" }
+        assert_output(nil, /no link for alice: IOError: no mail/) do
+            assert_equal 202, ask("alice")
+        end
+        assert_equal 0, @db[:invites].count
+    end
+
     private
 
-    def ask(who, peer: WAN) = call(:post, "/session/recover", { who: }, peer:)
+    # Asked, and the link handed over, if one is: what the tests read
+    # is written then.
+    def ask(who, peer: WAN)
+        status = call(:post, "/session/recover", { who: }, peer:)
+        last_request.env[Sesam::Sinatra::Recovery::HANDOVER]&.join
+        status
+    end
 
     def invited = @told.select { it.first == :invited }.map { it.drop(1) }
 end

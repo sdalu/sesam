@@ -416,11 +416,13 @@ is refused (422), theirs kept. Whatever refuses an invitation's
 password or passkey leaves the invitation open.
 
 A link asked for (`POST /session/recover`) is answered the same
-whether or not it names anyone. It is made only for a user the
-application can reach (`sesam_reached?`), so that an open invitation
-of someone else's is never withdrawn in vain; an address asks 20 times
-a window (429 after), a name is mailed 3 times a window (silently
-after).
+whether or not it names anyone, and at once: the link is handed over
+after the answer, on a thread of its own, since a mail sent only for
+someone who exists would otherwise show in the time it takes. It is
+made only for a user the application can reach (`sesam_reached?`), so
+that an open invitation of someone else's is never withdrawn in vain;
+an address asks 20 times a window (429 after), a name is mailed 3
+times a window (silently after).
 
 Bodies are JSON (`name`, `password`, `current`, `token`, `credential`,
 `label`). Failed sign-ins are counted by name and address (5) and by
@@ -450,6 +452,11 @@ registering sesam; sesam's own fills only what is missing:
   over (mail it); false keeps none; by default `false`.
 - `sesam_asked(name, db)`: a link handed to `name`, in the invitation's
   transaction in `db`; by default nothing.
+
+These two run after the answer, on a thread of their own: a
+thread-local the application set for the request (who acts, for an
+audit) is not there, so they take what they need from the request
+itself. A failure there is said on the server's output.
 
 ## Known shortfalls
 - No release yet: `Sesam::VERSION` is 0.0.0.

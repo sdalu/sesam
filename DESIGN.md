@@ -132,6 +132,9 @@ the application gives one (sesam has no mail): asking from the
 sign-in screen (`recovery`) is off, since a route that takes a name or
 an address is one more door, and answering it differently for a name
 that exists would tell who does. It answers the same in every case,
+in the same time too: the link is handed over after the answer, on a
+thread, since mailing it takes long and happens only for a user who
+exists, and the hooks it calls then run off the request's thread. It
 makes an invitation only for a user the application can reach (an
 invitation withdraws the one still open, which asking for nobody must
 not do), and is counted by address and, silently, by name.

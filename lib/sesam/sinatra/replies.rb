@@ -77,6 +77,9 @@ module Sesam
 
             # A link asked for: hand `token`'s invitation to `name`;
             # whether it reached them (false: no invitation is kept).
+            # Called after the answer, off the request's thread (Recovery),
+            # as sesam_asked is: what they need of the request is read
+            # from it, never from a thread-local.
             def sesam_reached?(_name, _token) = false
 
             # A link asked for and handed to `name`, in the invitation's
