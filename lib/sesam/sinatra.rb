@@ -14,6 +14,7 @@ require "sesam/sinatra/throttled"
 require "sesam/sinatra/sessions"
 require "sesam/sinatra/passkeys"
 require "sesam/sinatra/invitations"
+require "sesam/sinatra/recovery"
 
 module Sesam
     # The sign-in routes and the gate's helpers, as a Sinatra extension:
@@ -36,14 +37,17 @@ module Sesam
         OPEN = [%w[POST /session/challenge], %w[POST /session],
                 %w[POST /session/password], %w[POST /session/invite/check],
                 %w[POST /session/invite], %w[POST /session/invite/challenge],
-                %w[POST /session/invite/passkey], %w[DELETE /session]].freeze
+                %w[POST /session/invite/passkey], %w[POST /session/recover],
+                %w[DELETE /session]].freeze
 
         def self.registered(app)
             app.set :sesam, nil unless app.respond_to?(:sesam)
             app.helpers(missing(app, Replies), missing(app, Hooks))
             app.helpers Gate
             app.error(Refused) { refusal(env["sinatra.error"]) }
-            [Sessions, Passkeys, Invitations].each { app.register it }
+            [Sessions, Passkeys, Invitations, Recovery].each do |part|
+                app.register part
+            end
         end
 
         # What an answer to a passkey that does not verify is: WebAuthn's

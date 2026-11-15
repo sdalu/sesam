@@ -113,6 +113,23 @@ before anything else. The header is the browser's, not the page's, and
 needs no list of the application's own names, which behind proxies the
 request itself cannot give.
 
+## Recovery: an invitation, asked for or given
+
+A forgotten password or a lost device is answered by an invitation,
+as a first sign-in is; nothing else signs anyone in. By default only
+the application gives one (sesam has no mail): asking from the
+sign-in screen (`recovery`) is off, since a route that takes a name or
+an address is one more door, and answering it differently for a name
+that exists would tell who does. It answers the same in every case,
+makes an invitation only for a user the application can reach (an
+invitation withdraws the one still open, which asking for nobody must
+not do), and is counted by address and, silently, by name.
+
+A reset ends the user's other sessions; whether it also drops the
+passkeys they had is the application's call (`reset_passkeys`): kept,
+a lost phone still signs in after its owner's reset; dropped, every
+device they still hold must register again.
+
 ## Forwarded, not X-Forwarded-For
 
 RFC 7239's header names each hop; a client can write only to the left

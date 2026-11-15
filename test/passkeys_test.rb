@@ -44,4 +44,15 @@ class PasskeysTest < Minitest::Test
         end
         assert_equal "alice", @keys.owner_of("c1")
     end
+
+    # A lost device's, all of a user's at once; others' kept.
+    def test_clearing_a_user_s_passkeys
+        @keys.add("alice", id: "c2", public_key: "pk", sign_count: 0,
+                           label: "tablet")
+        @keys.add("bob", id: "c3", public_key: "pk", sign_count: 0,
+                         label: "phone")
+        assert_equal 2, @keys.clear("alice")
+        assert_empty @keys.of("alice")
+        assert_equal ["c3"], @keys.of("bob").map(&:id)
+    end
 end

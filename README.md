@@ -97,6 +97,7 @@ users.address!("alice", "192.0.2.7")   # a LAN caller named, not proved
 users.end_sessions!("alice")           # sessions given before end
 users.session_valid?("alice", held.issued)
 users.remove("alice")                  # their ways in go with them
+Sesam::Passkeys.new(db).clear("bob")   # a lost device: every passkey
 ```
 
 `Sesam.migrate` keeps its own version (`sesam_schema`), apart from
@@ -157,6 +158,14 @@ found.verdict  # :credential, :lan or :refused
 found.name     # "alice", "lan:192.0.2.9", "app:warm"
 ```
 
+Two settings say what an account's recovery does. `reset_passkeys`:
+what a reset by invitation does to the passkeys a user had, `keep`
+(the default: kept, their other sessions ended), `drop` (both gone:
+a lost device signs in no more), or `drop_keep_sessions` (the
+passkeys alone). `recovery`: whether a link may be asked for from the
+sign-in screen (`POST /session/recover`, false by default), the link
+lasting `recovery_for` seconds (an hour).
+
 A setting not in `Settings::DEFAULTS` is refused, as are networks that
 do not parse, a passkey without a session, and `accept` empty or
 naming anything but `key`, `passkey` and `password`. A passkey given
@@ -193,7 +202,8 @@ route, open or not: a page elsewhere must not drive a LAN browser into
 acting, nor sign it in as someone else. A program sends no such header
 and passes. `admit!` refuses an unknown caller with a 401, `WWW-Authenticate:
 Bearer realm="app"` and `X-App-Sign-In` listing the browser's ways in
-(`password passkey`, empty for none); `who` is the caller's name.
+(`password passkey`, empty for none, with `recover` where a link may
+be asked for); `who` is the caller's name.
 
 | Route | Open | Does |
 |---|---|---|
@@ -206,12 +216,20 @@ Bearer realm="app"` and `X-App-Sign-In` listing the browser's ways in
 | `POST /session/invite/check` | yes | whose invitation a token is, without spending it |
 | `POST /session/invite` | yes | spends it on a password; other sessions end |
 | `POST /session/invite/challenge`, `POST /session/invite/passkey` | yes | spends it on a passkey |
+| `POST /session/recover` | yes | a link asked for by `who`, a login or what the application knows a user by; 202 whatever it names; 404 where `recovery` is off |
 
 A ceremony's challenge is spent once, remembered as spent until it
 would have lapsed, so an answer sent again with its cookie is refused.
 A credential id is one user's: a registration offering another user's
 is refused (422), theirs kept. Whatever refuses an invitation's
 password or passkey leaves the invitation open.
+
+A link asked for (`POST /session/recover`) is answered the same
+whether or not it names anyone. It is made only for a user the
+application can reach (`sesam_reached?`), so that an open invitation
+of someone else's is never withdrawn in vain; an address asks 20 times
+a window (429 after), a name is mailed 3 times a window (silently
+after).
 
 Bodies are JSON (`name`, `password`, `current`, `token`, `credential`,
 `label`). Failed sign-ins are counted by name and address (5) and by
@@ -230,6 +248,8 @@ registering sesam; sesam's own fills only what is missing:
 | `sesam_changed(name, db)` | nothing | in the transaction where a user's way in changed |
 | `sesam_notify(name, kind)` | nothing | after it, `:password` or `:passkey` |
 | `sesam_profile(name)` | `{}` | merged into `GET /session` and the invitation check |
+| `sesam_named(text)` | `nil` | a link asked for: the user `text` names besides a login (an email address) |
+| `sesam_reached?(name, token)` | `false` | a link asked for: hand the invitation over (mail it); false keeps none |
 
 ## Known shortfalls
 - No release yet: `Sesam::VERSION` is 0.0.0.

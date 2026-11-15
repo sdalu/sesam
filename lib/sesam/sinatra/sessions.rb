@@ -103,11 +103,12 @@ module Sesam
                 end
 
                 # The block's change to `name`'s way in, their sessions
-                # ended, told the application, in one transaction.
-                def reset!(db, users, name)
+                # ended unless `sessions` is false, told the application, in
+                # one transaction.
+                def reset!(db, users, name, sessions: true)
                     db.transaction do
                         yield
-                        users.end_sessions!(name)
+                        users.end_sessions!(name) if sessions
                         sesam_changed(name, db)
                     end
                 end

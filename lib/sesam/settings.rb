@@ -17,12 +17,18 @@ module Sesam
         # Each setting but `database`, as it is unless given.
         DEFAULTS = { lan: [], proxies: [], accept: Accept::ALL, mount: "",
                      session: nil, passkey: nil, throttle: nil,
-                     reserved: [], app: "sesam" }.freeze
+                     reserved: [], app: "sesam", reset_passkeys: "keep",
+                     recovery: false, recovery_for: 3600 }.freeze
+
+        # What a reset by invitation does to the passkeys a user had and
+        # their other sessions: keep (passkeys kept, sessions ended),
+        # drop (both gone), drop_keep_sessions (the passkeys alone).
+        RESETS = %w[keep drop drop_keep_sessions].freeze
 
         # ceremonies: the challenges spent (Spent), each until it would
         # have lapsed.
         attr_reader :accept, :mount, :session, :passkey, :throttle,
-                    :ceremonies,
+                    :ceremonies, :reset_passkeys, :recovery, :recovery_for,
                     :reserved, :app, :access
 
         # given: DEFAULTS' keys; another is refused. throttle: a
@@ -34,6 +40,7 @@ module Sesam
             set = settings!(given)
             network!(set)
             ways!(set)
+            recovery!(set)
             @access = Access.new(self)
             freeze
         end
@@ -83,6 +90,20 @@ module Sesam
             @throttle = set[:throttle] || Throttle.new(window: 900)
             @passkey  = passkey_of(set[:passkey])
             @ceremonies = Spent.new(window: Session::CEREMONY)
+        end
+
+        # A reset's effect (RESETS), and whether a link may be asked for
+        # from the sign-in screen (recovery, true or false), lasting
+        # recovery_for seconds.
+        def recovery!(set)
+            @reset_passkeys = set[:reset_passkeys].to_s
+            unless RESETS.include?(@reset_passkeys)
+                raise Error, "reset_passkeys: one of #{RESETS.join(", ")}"
+            end
+            @recovery = set[:recovery]
+            raise Error, "recovery: true or false" unless
+                [true, false].include?(@recovery)
+            @recovery_for = Integer(set[:recovery_for])
         end
 
         def settings!(given)

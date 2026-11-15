@@ -124,6 +124,19 @@ module WebSupport
                 told << [:notify, name, kind]
             end
             app.define_method(:sesam_profile) { profiles.fetch(it, {}) }
+            recovery(app, told, profiles)
+        end
+
+        # A user by their email (a profile's :email), and a link mailed
+        # to whoever has one.
+        def self.recovery(app, told, profiles)
+            app.define_method(:sesam_named) do |text|
+                profiles.find { |_, profile| profile[:email] == text }&.first
+            end
+            app.define_method(:sesam_reached?) do |name, token|
+                told << [:invited, name, token]
+                !profiles.dig(name, :email).nil?
+            end
         end
     end
 end

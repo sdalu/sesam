@@ -64,4 +64,12 @@ class SettingsTest < Minitest::Test
         assert_nil settings(passkey:, session:,
                             accept: %w[key password]).passkey
     end
+
+    def test_a_reset_s_effect_and_recovery_are_checked
+        assert_equal "keep", settings.reset_passkeys
+        assert_raises(Sesam::Settings::Error) { settings(reset_passkeys: "all") }
+        refute settings.recovery
+        assert_equal 3600, settings(recovery: true).recovery_for
+        assert_raises(Sesam::Settings::Error) { settings(recovery: "yes") }
+    end
 end

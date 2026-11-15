@@ -52,6 +52,9 @@ module Sesam
             end
         end
 
+        # Every passkey of `name` gone (a lost device, a reset); how many.
+        def clear(name) = rows.where(user: name.to_s).delete
+
         # The passkeys `name` keeps afterwards.
         def remove(name, id)
             rows.where(user: name.to_s, id: id.to_s).delete

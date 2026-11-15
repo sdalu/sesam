@@ -10,12 +10,13 @@ module Sesam
         module Gate
             # Admits the caller, remembered for the route (#who), or
             # refuses it: WWW-Authenticate, and the browser's ways in for
-            # a sign-in screen to offer (empty for none).
+            # a sign-in screen to offer (empty for none), `recover` among
+            # them where a link may be asked for (Settings#recovery).
             def admit!
                 @caller = sesam.access.caller_for(request.env)
                 return unless @caller.refused?
                 headers("WWW-Authenticate" => sesam.realm,
-                        sesam.sign_in_header => sesam.accept.sign_in.join(" "))
+                        sesam.sign_in_header => ways_in.join(" "))
                 refuse(401, "sign in, or send a key from this network: " \
                             "Authorization: Bearer KEY")
             end
@@ -54,6 +55,10 @@ module Sesam
             private
 
             def sesam = settings.sesam
+
+            def ways_in
+                sesam.accept.sign_in + (sesam.recovery ? ["recover"] : [])
+            end
         end
     end
 end

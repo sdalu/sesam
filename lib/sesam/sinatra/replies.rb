@@ -70,6 +70,14 @@ module Sesam
             # What GET /session and an invitation's check say of `name`
             # besides (nil for no user).
             def sesam_profile(_name) = {}
+
+            # The user an email address (or another name for them) is,
+            # for a link asked for (recovery); nil for none.
+            def sesam_named(_text) = nil
+
+            # A link asked for: hand `token`'s invitation to `name`;
+            # whether it reached them (false: no invitation is kept).
+            def sesam_reached?(_name, _token) = false
         end
     end
 end

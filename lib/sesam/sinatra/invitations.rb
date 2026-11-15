@@ -92,20 +92,29 @@ module Sesam
                 end
 
                 # Spends the invitation, the block (given the database and
-                # its user) in the same transaction: its user's other
-                # sessions end, and the application is told. The user; a
-                # refusal of the block's (a password too short), a 422.
+                # its user) in the same transaction, after the passkeys
+                # they had are dropped where reset_passkeys says: their
+                # other sessions end (but drop_keep_sessions), and the
+                # application is told. The user; a refusal of the block's
+                # (a password too short), a 422.
                 def redeemed
                     lookup_throttled!
                     name = sesam.database do |db|
                         users = sesam.users_in(db)
                         users.redeem(token) do |user|
-                            reset!(db, users, user) { yield db, user }
+                            spend(db, users, user) { yield db, user }
                         end
                     end
                     name || closed!
                 rescue Users::Error => e
                     refuse(422, e.message)
+                end
+
+                def spend(db, users, user, &)
+                    mode = sesam.reset_passkeys
+                    sesam.passkeys_in(db).clear(user) unless mode == "keep"
+                    reset!(db, users, user,
+                           sessions: mode != "drop_keep_sessions", &)
                 end
 
                 def closed!
