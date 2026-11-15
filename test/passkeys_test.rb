@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+# Each user's passkeys: the public half by its credential id, found by
+# its owner only.
+class PasskeysTest < Minitest::Test
+    def setup
+        @db = Sequel.sqlite
+        Sesam.migrate(@db)
+        users = Sesam::Users.new(@db)
+        users.add("alice")
+        users.add("bob")
+        @keys = Sesam::Passkeys.new(@db)
+        @keys.add("alice", id: "c1", public_key: "pk", sign_count: 3,
+                           label: "phone")
+    end
+
+    def test_a_credential_is_its_owner_s
+        assert_equal "alice", @keys.owner_of("c1")
+        assert_nil @keys.find("bob", "c1")
+        assert_equal ["phone"], @keys.of("alice").map(&:label)
+        assert_empty @keys.remove("bob", "c1")
+        assert_equal 1, @keys.of("alice").size
+    end
+
+    # Registered again, an id replaces its record, whoever held it.
+    def test_registered_again_an_id_replaces_its_record
+        @keys.add("bob", id: "c1", public_key: "pk2", sign_count: 0,
+                         label: "tablet")
+        assert_equal "bob", @keys.owner_of("c1")
+        assert_empty @keys.of("alice")
+    end
+
+    def test_an_assertion_records_the_counter
+        @keys.seen("alice", "c1", 7)
+        assert_equal 7, @keys.find("alice", "c1").sign_count
+    end
+end

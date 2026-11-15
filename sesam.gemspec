@@ -34,6 +34,8 @@ Gem::Specification.new do |s|
     # base64 left Ruby's default gems in 3.4: Password and Session encode
     # with it.
     s.add_dependency "base64", "~> 0.2"
+    # Users and Passkeys are kept in the application's database.
+    s.add_dependency "sequel", "~> 5.100"
     # Session reads the request's cookies through Rack::Request.
     s.add_dependency "rack", ">= 3.0"
 end

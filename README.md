@@ -1,7 +1,6 @@
 # sesam
 
-Who may use a small Rack application, and how they prove it. The
-pieces that need nothing but the standard library and Rack:
+Who may use a small Rack application, and how they prove it.
 
 | Piece             | What it does                                             |
 |-------------------|----------------------------------------------------------|
@@ -9,8 +8,10 @@ pieces that need nothing but the standard library and Rack:
 | `Sesam::Session`  | a session as a signed cookie holding a name and the moment it was given, no secret; a passkey ceremony's challenge carried the same way, for five minutes |
 | `Sesam::Forwarded`| the `for` of each hop of a Forwarded header (RFC 7239), as an address |
 | `Sesam::Throttle` | failures counted per key over a window, in memory          |
+| `Sesam::Users`    | users by name in a Sequel database: passwords, API keys, single-use invitations, the LAN addresses each is known at, the moment their sessions were ended |
+| `Sesam::Passkeys` | each user's passkeys: the public half of a key pair, by credential id |
 
-Ruby ≥ 3.4; depends on `rack` and `base64`.
+Ruby ≥ 3.4; depends on `rack`, `base64` and `sequel`.
 
 ```ruby
 # Gemfile
@@ -73,9 +74,43 @@ throttle.blocked?("try:alice@192.0.2.7", 5)  # => false until 5
 throttle.clear!("try:alice@192.0.2.7")
 ```
 
+## Users
+
+```ruby
+db = Sequel.sqlite("app.db")
+Sesam.migrate(db)            # sesam's tables, before the application's
+users = Sesam::Users.new(db, reserved: %w[root])
+
+users.add("alice")
+token = users.invite("alice")          # shown once; its digest kept
+users.redeem(token) { users.password!(it, "a long enough password") }
+users.password_match?("alice", "a long enough password")  # => true
+key = users.key("alice", label: "script")                 # shown once
+users.key_owner(key)                                      # => "alice"
+users.address!("alice", "192.0.2.7")   # a LAN caller named, not proved
+users.end_sessions!("alice")           # sessions given before end
+users.session_valid?("alice", held.issued)
+users.remove("alice")                  # their ways in go with them
+```
+
+`Sesam.migrate` keeps its own version (`sesam_schema`), apart from
+the application's migrations, and refuses a database newer than this
+sesam. Its tables are `users` (`name`, `password`, `sessions_since`,
+`created_at`), `user_keys`, `invites`, `user_addresses` and
+`passkeys`, each made only where missing. Anything else the
+application knows of a person (names, an email address) goes in a
+table of its own keyed by `user`, a foreign key to `users` cascading
+on delete, migrated after sesam's.
+
+An invitation lasts a week unless told, and the newest withdraws
+those still open. `redeem` runs its block in the same transaction:
+what the block refuses leaves the invitation open. A wrong password
+and an unknown name take the same time, the name checked against a
+decoy hash.
+
 ## Known shortfalls
 
-- Users, API keys, invitations and passkeys are not here yet: they are
-  ClimatControl's still, as is the Sinatra layer that admits callers
-  and serves the sign-in routes.
+- Passkey ceremonies (WebAuthn) are not here yet, nor the Sinatra
+  layer that admits callers and serves the sign-in routes: both are
+  ClimatControl's still.
 - No release yet: `Sesam::VERSION` is 0.0.0.

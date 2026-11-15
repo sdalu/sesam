@@ -126,3 +126,8 @@ Style/Documentation:
 # guide's own style for trivial methods.
 Naming/MethodParameterName:
   Enabled: false
+
+# --- Project: a Sequel migration is one block per schema step -----------------
+Metrics/BlockLength:
+  Exclude:
+    - "lib/sesam/migrations/*.rb"

@@ -36,6 +36,22 @@ The format is ClimatControl's, byte for byte (test/session_test.rb
 pins it), so that its sessions survive the move; the cookies' names
 are parameters for the same reason.
 
+## Tables of its own, migrated apart
+
+sesam's tables carry what signing in needs and nothing an application
+might add: a person's names or address are the application's, in a
+table keyed by the user. Two migrators altering one table would leave
+neither owning it, so sesam keeps its own version table and runs
+first, and its first migration makes each table only where missing,
+for a database that held them before sesam. A database past what this
+sesam knows is refused, not migrated down.
+
+Keys and invitations are 256 random bits, kept as SHA-256 digests: a
+fast digest loses nothing against that much entropy, and a lookup by
+digest tells a guesser nothing a guess would not. Names an
+application keeps for itself (an audit's `root`) are given, not
+built in.
+
 ## Forwarded, not X-Forwarded-For
 
 RFC 7239's header names each hop; a client can write only to the left

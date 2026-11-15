@@ -8,4 +8,6 @@ group :development, :test do
     gem "minitest", "~> 5.25"
     gem "rake", "~> 13.2"
     gem "rubocop", "~> 1.90"
+    # The database the tests keep users in, in memory.
+    gem "sqlite3", "~> 2.0"
 end
