@@ -27,6 +27,17 @@ price is revocation: nothing on the server holds a session, so a
 user's sessions end by a moment kept with the user (`issued` must be
 later), checked by whoever reads the session.
 
+Its anatomy, for a made-up `alice` and made-up numbers:
+
+```text
+YWxpY2U6MTAwMCA1MDAw.oyIuymvmKiRvuGTCNa6cc1JmzclDsjTkBQzhLuHqvmU
+└──────────────────┘─└─────────────────────────────────────────┘
+base64url('NAME:ISSUED_MS EXPIRY_S')
+                       base64url(HMAC-SHA256(secret, payload))
+
+the challenge cookie: the same, the challenge in place of NAME:ISSUED_MS
+```
+
 A passkey ceremony is two requests, and the challenge must reach the
 second before any session exists: it rides in a cookie signed the same
 way, for five minutes. A challenge nobody can forge is as safe held

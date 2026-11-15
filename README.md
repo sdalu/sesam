@@ -2,18 +2,81 @@
 
 Who may use a small Rack application, and how they prove it.
 
-| Piece             | What it does                                             |
-|-------------------|----------------------------------------------------------|
-| `Sesam::Password` | a password kept as an scrypt hash, its cost and salt beside it; checked in constant time; a new one refused when shorter than 12 characters or holding control characters |
-| `Sesam::Session`  | a session as a signed cookie holding a name and the moment it was given, no secret; a passkey ceremony's challenge carried the same way, for five minutes |
-| `Sesam::Forwarded`| the `for` of each hop of a Forwarded header (RFC 7239), as an address |
-| `Sesam::Throttle` | failures counted per key over a window, in memory          |
-| `Sesam::Users`    | users by name in a Sequel database: passwords, API keys, single-use invitations, the LAN addresses each is known at, the moment their sessions were ended |
-| `Sesam::Passkeys` | each user's passkeys: the public half of a key pair, by credential id |
-| `Sesam::Passkey`  | the WebAuthn ceremonies, registering and signing in (`require "sesam/passkey"`, with the `webauthn` gem) |
-| `Sesam::Settings` | what the application tells sesam: its database, networks, what it accepts, its Session and Passkey |
-| `Sesam::Access`   | who is calling: a user by key or session, the LAN, the application itself, or refused |
-| `Sesam::Sinatra`  | the gate's helpers and the sign-in routes (`require "sesam/sinatra"`, with the `sinatra` gem) |
+## At a glance
+
+The host application requires `sesam/sinatra` for the gate and the
+sign-in routes, and `sesam/passkey` beside the core for WebAuthn; both
+are optional.
+
+```text
+┌──────────────────────────────────────────────┐
+│ the host application                         │
+│                                              │
+│ answer · refuse · parsed_body                │
+│ sesam_changed · sesam_notify · sesam_profile │
+│ sesam_named · sesam_reached?                 │
+└───────────────────────┬──────────────────────┘
+                        │
+                        ▼
+   ┌────────────────────┴───────────────────┐
+   │ sesam/sinatra (optional require)       │
+   │                                        │
+   │ the gate's helpers, the sign-in routes │
+   └────────────────────┬───────────────────┘
+                        │
+                        ▼
+       ┌────────────────┴───────────────┐  ┌────────────────────┐
+       │ the core                       │  │ sesam/passkey      │
+       │                                │  │                    │
+       │ Settings · Access · Credential │  │ (optional require) │
+       │ Users · Passkeys · Session     │◄─│ WebAuthn           │
+       │ Throttle · Spent · Networks    │  └────────────────────┘
+       │ Forwarded · Password           │
+       └────────────────┬───────────────┘
+                        │
+                        ▼
+     ┌──────────────────┴─────────────────┐
+     │ the application's database         │
+     │                                    │
+     │ users · user_keys · user_addresses │
+     │ invites · passkeys                 │
+     │ sesam_schema (version)             │
+     └────────────────────────────────────┘
+```
+
+- [At a glance](#at-a-glance)
+- [Passwords](#passwords)
+- [Sessions](#sessions)
+- [The caller behind proxies](#the-caller-behind-proxies)
+- [Counting failures](#counting-failures)
+- [Users](#users)
+- [Passkeys](#passkeys)
+- [Who is calling](#who-is-calling)
+- [The routes](#the-routes)
+- [Known shortfalls](#known-shortfalls)
+
+- `Sesam::Password`: a password kept as an scrypt hash, its cost and
+  salt beside it; checked in constant time; a new one refused when
+  shorter than 12 characters or holding control characters
+- `Sesam::Session`: a session as a signed cookie holding a name and the
+  moment it was given, no secret; a passkey ceremony's challenge carried
+  the same way, for five minutes
+- `Sesam::Forwarded`: the `for` of each hop of a Forwarded header (RFC
+  7239), as an address
+- `Sesam::Throttle`: failures counted per key over a window, in memory
+- `Sesam::Users`: users by name in a Sequel database: passwords, API
+  keys, single-use invitations, the LAN addresses each is known at, the
+  moment their sessions were ended
+- `Sesam::Passkeys`: each user's passkeys: the public half of a key
+  pair, by credential id
+- `Sesam::Passkey`: the WebAuthn ceremonies, registering and signing in
+  (`require "sesam/passkey"`, with the `webauthn` gem)
+- `Sesam::Settings`: what the application tells sesam: its database,
+  networks, what it accepts, its Session and Passkey
+- `Sesam::Access`: who is calling: a user by key or session, the LAN,
+  the application itself, or refused
+- `Sesam::Sinatra`: the gate's helpers and the sign-in routes
+  (`require "sesam/sinatra"`, with the `sinatra` gem)
 
 Ruby ≥ 3.4; depends on `rack`, `base64` and `sequel`; passkeys also
 on `webauthn`, the routes on `sinatra`, which the application adds to
@@ -65,6 +128,31 @@ ended. The cookies' names default to `sesam_session` and
 ```ruby
 Sesam::Forwarded.fors('for=192.0.2.60, for="[2001:db8::17]:4711"')
 # => ["192.0.2.60", "2001:db8::17"]
+```
+
+Through two trusted proxies, the header grows left to right as each
+one forwards; the application walks it from the right:
+
+```text
+client  203.0.113.10
+  │
+  ▼
+outer proxy  198.51.100.10
+  │
+  ▼  Forwarded: for=203.0.113.10
+local proxy  192.0.2.10
+  │
+  ▼  Forwarded: for=203.0.113.10, for=198.51.100.10
+application
+
+Forwarded: for=203.0.113.10, for=198.51.100.10
+                             └───────────────┘
+                                     a proxy: skip
+           └──────────────┘
+                   not a proxy: the caller
+
+the walk starts at the right and stops here: what the client
+itself might have written lands further left, never reached.
 ```
 
 A hop naming no address (`unknown`, an obfuscated name) or none is
@@ -134,6 +222,37 @@ options = passkey.authentication                     # no name asked
 passkey.authenticate!(credential, options.challenge, keys)  # => "alice"
 ```
 
+The ceremony, in two calls:
+
+```text
+┌─────────┐               ┌───────────────┐   ┌─────────────┐
+│ Browser │               │ Authenticator │   │ Application │
+└────┬────┘               └───────┬───────┘   └──────┬──────┘
+     │                            │                  │
+     │  POST /session/challenge   │                  │
+     │──────────────────────────────────────────────►│
+     │                            │                  │
+     │                            │ options + cookie │
+     │◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│
+     │                            │                  │
+     │      credentials.get       │                  │
+     │───────────────────────────►│                  │
+     │                            │                  │
+     │       the assertion        │                  │
+     │◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│                  │
+     │                            │                  │
+     │ POST /session {credential} │                  │
+     │──────────────────────────────────────────────►│
+     │                            │                  │
+     │                            │                  │──┐
+     │                            │                  │  │ checked, spent
+     │                            │                  │◄─┘
+     │                            │                  │
+     │                            │    cookie set    │
+     │◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│
+     │                            │                  │
+```
+
 The origin is what the browser's address bar shows: `https://HOST`
 with an optional port, or `http://localhost`; anything else is
 refused (`Sesam::Passkey::Error`). `name` is what the browser shows
@@ -156,6 +275,30 @@ SESAM = Sesam::Settings.new(
 found = SESAM.access.caller_for(env)
 found.verdict  # :credential, :lan or :refused
 found.name     # "alice", "lan:192.0.2.9", "app:warm"
+```
+
+The order `Access#caller_for` decides in:
+
+```text
+┌──────────────────────────────────┐
+│ a Bearer key (key accepted) or a │
+│ session cookie naming a user     │──► admitted as that user
+└─────────────────┬────────────────┘
+                  │ else
+                  ▼
+┌──────────────────────────────────┐
+│ a LAN address that is no proxy   │──► admitted as lan:ADDR, or as
+└─────────────────┬────────────────┘   the user known at that address
+                  │ else
+                  ▼
+┌──────────────────────────────────┐
+│ the env key APP.internal         │──► admitted as APP:NAME
+└─────────────────┬────────────────┘
+                  │ else
+                  ▼
+┌───────────────┐
+│ refused (401) │
+└───────────────┘
 ```
 
 Two settings say what an account's recovery does. `reset_passkeys`:
@@ -205,18 +348,66 @@ Bearer realm="app"` and `X-App-Sign-In` listing the browser's ways in
 (`password passkey`, empty for none, with `recover` where a link may
 be asked for); `who` is the caller's name.
 
-| Route | Open | Does |
-|---|---|---|
-| `GET /session` | | who is calling: name, via, the profile, password set, the passkeys' origin, the ways in |
-| `POST /session/password` | yes | signs in by name and password |
-| `PUT /session/password` | | changes one's password, the current one given; other sessions end |
-| `DELETE /session` | yes | signs out |
-| `POST /session/challenge`, `POST /session` | yes | signs in by passkey, two calls |
-| `GET /passkeys`, `POST /passkeys/challenge`, `POST /passkeys`, `DELETE /passkeys/:id` | | one's passkeys |
-| `POST /session/invite/check` | yes | whose invitation a token is, without spending it |
-| `POST /session/invite` | yes | spends it on a password; other sessions end |
-| `POST /session/invite/challenge`, `POST /session/invite/passkey` | yes | spends it on a passkey |
-| `POST /session/recover` | yes | a link asked for by `who`, a login or what the application knows a user by; 202 whatever it names; 404 where `recovery` is off |
+- `GET /session`: who is calling: name, via, the profile, password set,
+  the passkeys' origin, the ways in
+- `POST /session/password` (open): signs in by name and password
+- `PUT /session/password`: changes one's password, the current one
+  given; other sessions end
+- `DELETE /session` (open): signs out
+- `POST /session/challenge`, `POST /session` (open): signs in by
+  passkey, two calls
+- `GET /passkeys`, `POST /passkeys/challenge`, `POST /passkeys`,
+  `DELETE /passkeys/:id`: one's passkeys
+- `POST /session/invite/check` (open): whose invitation a token is,
+  without spending it
+- `POST /session/invite` (open): spends it on a password; other sessions
+  end
+- `POST /session/invite/challenge`, `POST /session/invite/passkey`
+  (open): spends it on a passkey
+- `POST /session/recover` (open): a link asked for by `who`, a login or
+  what the application knows a user by; 202 whatever it names; 404 where
+  `recovery` is off
+
+An invitation's life:
+
+```text
+         ┌──────────────────────────────────────────┐
+         │ an invitation made                       │
+         │ (Users#invite, or POST /session/recover) │
+         └─────────────────────┬────────────────────┘
+                               │
+                               ▼
+              ┌────────────────┴────────────────┐
+              │ the link, its token after the # │
+              └────────────────┬────────────────┘
+                               │
+                               ▼
+                ┌──────────────┴─────────────┐
+                │ POST /session/invite/check │
+                │ (read, not spent)          │
+                └──────────────┬─────────────┘
+                               │
+            ┌──────────────────┴─────────────┐
+            ▼                                ▼
+┌───────────┴──────────┐    ┌────────────────┴────────────────┐
+│ POST /session/invite │    │ /session/invite/challenge, then │
+│                      │    │ /session/invite/passkey         │
+│ spent on a password  │    │ spent on a passkey              │
+└───────────┬──────────┘    └────────────────┬────────────────┘
+            │                                │
+            └──────────────────┬─────────────┴──► refused: leaves it open
+                               │
+                               ▼
+         ┌─────────────────────┴────────────────────┐
+         │ their other sessions end, their passkeys │
+         │ go, each as reset_passkeys says          │
+         └─────────────────────┬────────────────────┘
+                               │
+                               ▼
+           ┌───────────────────┴──────────────────┐
+           │ the user signs in with what they set │
+           └──────────────────────────────────────┘
+```
 
 A ceremony's challenge is spent once, remembered as spent until it
 would have lapsed, so an answer sent again with its cookie is refused.
@@ -240,16 +431,23 @@ its routes.
 What the application may define, as helper modules, before or after
 registering sesam; sesam's own fills only what is missing:
 
-| Helper | Default | Called |
-|---|---|---|
-| `answer(data)` | `{"data": …}` | every answer |
-| `refuse(status, message, field = nil)` | raises `Sesam::Sinatra::Refused`, answered `{"error", "field"}`; an application's own must raise too, never `halt`, or a refusal inside a transaction commits it | every refusal |
-| `parsed_body` | the JSON object; 415 for a body not said `application/json`, 422 for one that is no object | reading a body |
-| `sesam_changed(name, db)` | nothing | in the transaction where a user's way in changed |
-| `sesam_notify(name, kind)` | nothing | after it, `:password` or `:passkey` |
-| `sesam_profile(name)` | `{}` | merged into `GET /session` and the invitation check |
-| `sesam_named(text)` | `nil` | a link asked for: the user `text` names besides a login (an email address) |
-| `sesam_reached?(name, token)` | `false` | a link asked for: hand the invitation over (mail it); false keeps none |
+- `answer(data)`: every answer; by default `{"data": …}`.
+- `refuse(status, message, field = nil)`: every refusal; by default
+  raises `Sesam::Sinatra::Refused`, answered `{"error", "field"}`; an
+  application's own must raise too, never `halt`, or a refusal inside a
+  transaction commits it.
+- `parsed_body`: reading a body; by default the JSON object; 415 for a
+  body not said `application/json`, 422 for one that is no object.
+- `sesam_changed(name, db)`: in the transaction where a user's way in
+  changed; by default nothing.
+- `sesam_notify(name, kind)`: after it, `:password` or `:passkey`; by
+  default nothing.
+- `sesam_profile(name)`: merged into `GET /session` and the invitation
+  check; by default `{}`.
+- `sesam_named(text)`: a link asked for: the user `text` names besides a
+  login (an email address); by default `nil`.
+- `sesam_reached?(name, token)`: a link asked for: hand the invitation
+  over (mail it); false keeps none; by default `false`.
 
 ## Known shortfalls
 - No release yet: `Sesam::VERSION` is 0.0.0.
