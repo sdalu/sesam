@@ -32,10 +32,11 @@ module Sesam
         Row = Data.define(:name, :password, :created_at, :keys, :passkeys,
                           :invite, :addresses)
 
-        # reserved: names no user may take, whatever their case.
+        # reserved: names no user may take, whatever their case;
+        # strings or symbols.
         def initialize(db, reserved: [])
             @db = db
-            @reserved = reserved.map(&:downcase).freeze
+            @reserved = reserved.map { it.to_s.downcase }.freeze
         end
 
         # `name` as a user's name; Error for one malformed or reserved.
@@ -56,9 +57,14 @@ module Sesam
 
         def any? = !users.empty?
 
+        # A name is refused when it differs from a user's by case alone:
+        # two such would be told apart by nobody reading an audit, and a
+        # database comparing without case would take one for the other.
         def add(name, now: Time.now)
             name = Users.name!(name, reserved: @reserved)
-            raise Error, "user #{name} exists already" if exists?(name)
+            taken = users.where(Sequel.function(:lower, :name) =>
+                                    name.downcase).get(:name)
+            raise Error, "user #{taken} exists already" if taken
             users.insert(name:, created_at: now, sessions_since: now)
             name
         end

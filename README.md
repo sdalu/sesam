@@ -197,6 +197,9 @@ application knows of a person (names, an email address) goes in a
 table of its own keyed by `user`, a foreign key to `users` cascading
 on delete, migrated after sesam's.
 
+A name is refused when a user's differs from it by case alone, and a
+`reserved` one (strings or symbols) whatever its case.
+
 An invitation lasts a week unless told, and the newest withdraws
 those still open. `redeem` runs its block in the same transaction:
 what the block refuses leaves the invitation open. A wrong password

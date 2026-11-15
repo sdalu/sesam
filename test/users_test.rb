@@ -15,9 +15,14 @@ class UsersTest < Minitest::Test
         @users.add("alice", now: NOW)
     end
 
+    # Taken whatever its case, as a reserved name is; reserved as a
+    # configuration may write them, symbols too.
     def test_names_malformed_taken_or_reserved_are_refused
-        ["al ice", "", "-x", "x" * 33, "alice", "Root"].each do |name|
+        ["al ice", "", "-x", "x" * 33, "alice", "Alice", "Root"].each do |name|
             assert_raises(Users::Error, name) { @users.add(name) }
+        end
+        assert_raises(Users::Error) do
+            Users.new(@db, reserved: %i[system]).add("System")
         end
         assert_equal "root", Users.new(@db).add("root")
     end

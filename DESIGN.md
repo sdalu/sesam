@@ -61,6 +61,11 @@ first, and its first migration makes each table only where missing,
 for a database that held them before sesam. A database past what this
 sesam knows is refused, not migrated down.
 
+A user's name is theirs whatever its case: a name differing from
+another by case alone is refused, as reserved names are compared,
+since nobody reading an audit tells them apart, and a database
+comparing without case would take one for the other.
+
 Keys and invitations are 256 random bits, kept as SHA-256 digests: a
 fast digest loses nothing against that much entropy, and a lookup by
 digest tells a guesser nothing a guess would not. Names an
