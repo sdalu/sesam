@@ -43,6 +43,15 @@ class AccessForwardedTest < Minitest::Test
         assert_predicate through("proto=https", "for=#{OUTER}"), :refused?
     end
 
+    # The client counted when every hop is a proxy: the leftmost.
+    def test_an_exhausted_chain_gives_the_leftmost_hop
+        env = from(LOCAL, "HTTP_FORWARDED" => "for=#{OUTER}, for=#{LOCAL}")
+        assert_equal OUTER, access.client(env)
+        assert_equal REMOTE,
+                     access.client(from(LOCAL, "HTTP_FORWARDED" =>
+                                               "for=#{REMOTE}, for=#{OUTER}"))
+    end
+
     def test_x_forwarded_for_is_never_read
         env = from(LOCAL, "HTTP_X_FORWARDED_FOR" => PHONE)
         assert_predicate access.caller_for(env), :refused?

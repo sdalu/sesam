@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-require "ipaddr"
-
 module Sesam
     # What an application tells sesam, in one place: where its users are
     # (`database`, a callable yielding a Sequel database to its block),
-    # its trusted networks (`lan`) and proxies (`proxies`), what a caller
+    # its trusted networks (`lan`) and proxies (`proxies`, each a list
+    # or Networks), what a caller
     # may present (`accept`), the cookie path (`mount`), the Session and
     # Passkey it made, the Throttle counting failures, the names no user
     # may take (`reserved`), and the application's name (`app`), which
@@ -46,10 +45,10 @@ module Sesam
         # Users, given to the block, in the database.
         def with_users = database { yield users_in(it) }
 
-        def lan?(address) = within?(@lan, address)
+        def lan?(address) = @lan.include?(address)
 
         # Whether `address` is a proxy trusted to say whom it forwards.
-        def proxy?(address) = within?(@proxies, address)
+        def proxy?(address) = @proxies.include?(address)
 
         # What a 401 carries: WWW-Authenticate, and the header naming the
         # browser's ways in (X-App-Sign-In).
@@ -58,14 +57,17 @@ module Sesam
 
         # The env key the application's own requests carry (set by no
         # HTTP request, a header becoming HTTP_*).
-        def internal = "#{@app}.internal"
+        def internal = Settings.internal(@app)
+
+        # The env key of `app`'s own requests, for what makes them.
+        def self.internal(app) = "#{app}.internal"
 
         private
 
         # Who is where: the LAN, the proxies, the application's name.
         def network!(set)
-            @lan     = networks(set[:lan], "lan")
-            @proxies = networks(set[:proxies], "proxies")
+            @lan     = Networks.of(set[:lan], "lan")
+            @proxies = Networks.of(set[:proxies], "proxies")
             @app     = set[:app].to_s
             @reserved = set[:reserved].dup.freeze
         end
@@ -90,19 +92,6 @@ module Sesam
         def callable!(database)
             return database if database.respond_to?(:call)
             raise Error, "database: a callable yielding a Sequel database"
-        end
-
-        def networks(given, name)
-            Array(given).map { IPAddr.new(it.to_s) }.freeze
-        rescue IPAddr::Error
-            raise Error, "#{name}: networks, as 192.0.2.0/24 or ::1/128"
-        end
-
-        def within?(networks, address)
-            ip = IPAddr.new(address.to_s)
-            networks.any? { it.include?(ip) }
-        rescue IPAddr::Error
-            false
         end
 
         def passkey_of(passkey)

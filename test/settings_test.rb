@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "ipaddr"
+
 require "test_helper"
 
 # What an application tells sesam, refused when no gate could work
@@ -22,7 +24,16 @@ class SettingsTest < Minitest::Test
         refute app.lan?("198.51.100.9")
         refute app.lan?("nowhere")
         assert app.proxy?("127.0.0.1")
-        assert_raises(Sesam::Settings::Error) { settings(lan: ["x"]) }
+        assert_raises(Sesam::Networks::Error) { settings(lan: ["x"]) }
+    end
+
+    # An IPAddr given keeps its mask (its to_s would not).
+    def test_networks_given_as_addresses_keep_their_mask
+        lan = Sesam::Networks.new([IPAddr.new("192.0.2.0/24")])
+        assert settings(lan:).lan?("192.0.2.9")
+        assert Sesam::Networks.new([IPAddr.new("192.0.2.0/24")])
+                              .include?("192.0.2.200")
+        refute lan.include?("192.0.3.1")
     end
 
     def test_an_unknown_setting_is_refused
