@@ -133,6 +133,9 @@ module WebSupport
             app.define_method(:sesam_named) do |text|
                 profiles.find { |_, profile| profile[:email] == text }&.first
             end
+            app.define_method(:sesam_asked) do |name, db|
+                told << [:asked, name, db.in_transaction?]
+            end
             app.define_method(:sesam_reached?) do |name, token|
                 told << [:invited, name, token]
                 !profiles.dig(name, :email).nil?

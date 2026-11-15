@@ -448,6 +448,8 @@ registering sesam; sesam's own fills only what is missing:
   login (an email address); by default `nil`.
 - `sesam_reached?(name, token)`: a link asked for: hand the invitation
   over (mail it); false keeps none; by default `false`.
+- `sesam_asked(name, db)`: a link handed to `name`, in the invitation's
+  transaction in `db`; by default nothing.
 
 ## Known shortfalls
 - No release yet: `Sesam::VERSION` is 0.0.0.

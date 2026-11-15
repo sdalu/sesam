@@ -62,13 +62,15 @@ module Sesam
                 end
 
                 # An invitation for `name`, kept only if the application
-                # handed it over.
+                # handed it over, and then told it (sesam_asked) in the
+                # same transaction.
                 def invited(name)
-                    sesam.with_users do |users|
+                    sesam.database do |db|
                         seconds = sesam.recovery_for
-                        users.invite(name, seconds:) do |token|
+                        sesam.users_in(db).invite(name, seconds:) do |token|
                             raise Sequel::Rollback unless
                                 sesam_reached?(name, token)
+                            sesam_asked(name, db)
                         end
                     end
                 end

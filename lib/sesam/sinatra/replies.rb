@@ -78,6 +78,10 @@ module Sesam
             # A link asked for: hand `token`'s invitation to `name`;
             # whether it reached them (false: no invitation is kept).
             def sesam_reached?(_name, _token) = false
+
+            # A link asked for and handed to `name`, in the invitation's
+            # transaction in `db` (an audit row, the caller's).
+            def sesam_asked(_name, _db) = nil
         end
     end
 end

@@ -72,6 +72,15 @@ class RecoveryTest < Minitest::Test
                      last_response.headers["X-App-Sign-In"]
     end
 
+    # A link handed over is told, in the invitation's transaction; one
+    # for nobody, not.
+    def test_a_link_handed_over_is_told
+        ask("carol")
+        ask("alice")
+        asked = @told.select { it.first == :asked }
+        assert_equal [[:asked, "alice", true]], asked
+    end
+
     private
 
     def ask(who, peer: WAN) = call(:post, "/session/recover", { who: }, peer:)
