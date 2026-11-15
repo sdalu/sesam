@@ -8,6 +8,10 @@ require "test_helper"
 class SchemaTest < Minitest::Test
     T = Time.new(2026, 11, 15, 9, 0)
 
+    # The column as MySQL describes it (SHOW FULL COLUMNS).
+    PUBLIC_KEY = { Field: "public_key", Type: "varchar(255)", Null: "NO",
+                   Default: nil, Key: "", Extra: "" }.freeze
+
     def test_a_new_database_gets_every_table
         db = Sequel.sqlite
         Sesam.migrate(db)
@@ -44,7 +48,27 @@ class SchemaTest < Minitest::Test
         assert db.table_exists?(:users)
     end
 
+    # Where a String is varchar(255) (MySQL), an RSA passkey's public
+    # key (363 characters at 2048 bits) would not fit: text there, its
+    # NOT NULL kept. SQLite keeps any length, its table left as it is.
+    def test_a_passkey_s_public_key_is_text
+        mysql = Sequel.connect("mock://mysql", fetch: PUBLIC_KEY)
+        migration("002").apply(mysql, :up)
+        assert_includes mysql.sqls, "ALTER TABLE `passkeys` CHANGE COLUMN " \
+                                    "`public_key` `public_key` text NOT NULL"
+        sqlite = Sequel.sqlite
+        Sesam.migrate(sqlite)
+        assert_equal "varchar(255)", sqlite.schema(:passkeys).to_h
+                                           .dig(:public_key, :db_type)
+    end
+
     private
+
+    # sesam's migration `number`, loaded on its own.
+    def migration(number)
+        load Dir[File.join(Sesam::Schema::DIRECTORY, "#{number}_*.rb")].first
+        Sequel::Migration.descendants.last
+    end
 
     # A database whose `users` an application made first, with a
     # column sesam does not know.

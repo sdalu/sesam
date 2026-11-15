@@ -59,7 +59,10 @@ table keyed by the user. Two migrators altering one table would leave
 neither owning it, so sesam keeps its own version table and runs
 first, and its first migration makes each table only where missing,
 for a database that held them before sesam. A database past what this
-sesam knows is refused, not migrated down.
+sesam knows is refused, not migrated down. A later migration changes
+only what a database needs: a passkey's public key made text where a
+String has a length (MySQL), SQLite left as it is, since copying a
+table anew to change a length it ignores is a risk for nothing.
 
 A user's name is theirs whatever its case: a name differing from
 another by case alone is refused, as reserved names are compared,

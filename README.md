@@ -195,7 +195,9 @@ sesam. Its tables are `users` (`name`, `password`, `sessions_since`,
 `passkeys`, each made only where missing. Anything else the
 application knows of a person (names, an email address) goes in a
 table of its own keyed by `user`, a foreign key to `users` cascading
-on delete, migrated after sesam's.
+on delete, migrated after sesam's. A passkey's `public_key` is text
+where a String would be `varchar(255)` (MySQL), an RSA key being
+longer; SQLite's table is left as it is.
 
 A name is refused when a user's differs from it by case alone, and a
 `reserved` one (strings or symbols) whatever its case.
@@ -464,3 +466,11 @@ itself. A failure there is said on the server's output.
 
 ## Known shortfalls
 - No release yet: `Sesam::VERSION` is 0.0.0.
+- A link asked for is mailed inside its invitation's transaction (kept
+  only if it reached its user), so on SQLite other writers wait for the
+  mail, and fail past the busy timeout (Sequel's 5 s by default).
+- On MySQL, times are kept to the second unless the connection sets
+  `fractional_seconds`: a session given less than a second before a
+  user's sessions are ended still counts.
+- On MySQL, a passkey's credential id is `varchar(255)`, which an
+  authenticator making longer ids would not fit.
