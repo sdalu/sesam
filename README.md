@@ -11,9 +11,13 @@ Who may use a small Rack application, and how they prove it.
 | `Sesam::Users`    | users by name in a Sequel database: passwords, API keys, single-use invitations, the LAN addresses each is known at, the moment their sessions were ended |
 | `Sesam::Passkeys` | each user's passkeys: the public half of a key pair, by credential id |
 | `Sesam::Passkey`  | the WebAuthn ceremonies, registering and signing in (`require "sesam/passkey"`, with the `webauthn` gem) |
+| `Sesam::Settings` | what the application tells sesam: its database, networks, what it accepts, its Session and Passkey |
+| `Sesam::Access`   | who is calling: a user by key or session, the LAN, the application itself, or refused |
+| `Sesam::Sinatra`  | the gate's helpers and the sign-in routes (`require "sesam/sinatra"`, with the `sinatra` gem) |
 
 Ruby ≥ 3.4; depends on `rack`, `base64` and `sequel`; passkeys also
-on `webauthn`, which the application adds to its own Gemfile.
+on `webauthn`, the routes on `sinatra`, which the application adds to
+its own Gemfile.
 
 ```ruby
 # Gemfile
@@ -139,8 +143,77 @@ ceremony is the caller's to carry (Session#challenge_cookie).
 `authenticate!` answers nil for a signature, challenge, origin or
 credential that is not right, and `register!` raises `WebAuthn::Error`.
 
-## Known shortfalls
+## Who is calling
 
-- The Sinatra layer that admits callers and serves the sign-in
-  routes is not here yet: it is ClimatControl's still.
+```ruby
+SESAM = Sesam::Settings.new(
+    database: ->(&block) { block.call(db) },  # yields a Sequel database
+    lan: ["192.0.2.0/24"], proxies: ["127.0.0.1"],
+    accept: %w[key passkey password], mount: "/app",
+    session:, passkey:, reserved: %w[root], app: "app"
+)
+found = SESAM.access.caller_for(env)
+found.verdict  # :credential, :lan or :refused
+found.name     # "alice", "lan:192.0.2.9", "app:warm"
+```
+
+A setting not in `Settings::DEFAULTS` is refused, as are networks that
+do not parse, a passkey without a session, and `accept` empty or
+naming anything but `key`, `passkey` and `password`. A passkey given
+while passkeys are not accepted is dropped. The caller is, in order:
+the user a Bearer key or a session names (a key only where `key` is
+accepted, a query string never); a LAN caller, named for the user
+known at that address if any (a name, not a proof); a request carrying
+`app.internal` in its env, which no HTTP request can set; else
+refused. Behind `proxies` the caller is the rightmost Forwarded hop
+that is no proxy; X-Forwarded-For is never read.
+
+## The routes
+
+```ruby
+require "sesam/sinatra"
+
+class App < Sinatra::Base
+    register Sesam::Sinatra
+    set :sesam, SESAM
+    before { admit! unless sesam_open? }
+    get("/secret") { answer({ who: }) }
+end
+```
+
+`admit!` refuses an unknown caller with a 401, `WWW-Authenticate:
+Bearer realm="app"` and `X-App-Sign-In` listing the browser's ways in
+(`password passkey`, empty for none); `who` is the caller's name.
+
+| Route | Open | Does |
+|---|---|---|
+| `GET /session` | | who is calling: name, via, the profile, password set, the passkeys' origin, the ways in |
+| `POST /session/password` | yes | signs in by name and password |
+| `PUT /session/password` | | changes one's password, the current one given; other sessions end |
+| `DELETE /session` | yes | signs out |
+| `POST /session/challenge`, `POST /session` | yes | signs in by passkey, two calls |
+| `GET /passkeys`, `POST /passkeys/challenge`, `POST /passkeys`, `DELETE /passkeys/:id` | | one's passkeys |
+| `POST /session/invite/check` | yes | whose invitation a token is, without spending it |
+| `POST /session/invite` | yes | spends it on a password; other sessions end |
+| `POST /session/invite/challenge`, `POST /session/invite/passkey` | yes | spends it on a passkey |
+
+Bodies are JSON (`name`, `password`, `current`, `token`, `credential`,
+`label`). Failed sign-ins are counted by name and address (5) and by
+address (20), failed invitation lookups by address (20), over the
+Throttle's window: past them, 429. A way not accepted answers 404 on
+its routes.
+
+What the application may define, as helper modules, before or after
+registering sesam; sesam's own fills only what is missing:
+
+| Helper | Default | Called |
+|---|---|---|
+| `answer(data)` | `{"data": …}` | every answer |
+| `refuse(status, message, field = nil)` | halts with `{"error", "field"}` | every refusal |
+| `parsed_body` | the JSON object, 422 for another | reading a body |
+| `sesam_changed(name, db)` | nothing | in the transaction where a user's way in changed |
+| `sesam_notify(name, kind)` | nothing | after it, `:password` or `:passkey` |
+| `sesam_profile(name)` | `{}` | merged into `GET /session` and the invitation check |
+
+## Known shortfalls
 - No release yet: `Sesam::VERSION` is 0.0.0.

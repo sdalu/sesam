@@ -19,3 +19,7 @@ end
 require "sesam/schema"
 require "sesam/users"
 require "sesam/passkeys"
+require "sesam/accept"
+require "sesam/credential"
+require "sesam/access"
+require "sesam/settings"

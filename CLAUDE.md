@@ -17,5 +17,7 @@ Ruby style: the `ruby` skill (4-space indentation, double quotes,
   password hashes and live session cookies must keep checking: the
   pinned values in test/password_test.rb and test/session_test.rb are
   its, never to be regenerated to make a test pass.
+- Inside `module Sesam`, `Sinatra` is `Sesam::Sinatra`: Sinatra's own
+  is `::Sinatra`.
 - base64 is no longer a default gem in Ruby 3.4: it is a dependency
   in the gemspec, or `require "base64"` fails under bundler.

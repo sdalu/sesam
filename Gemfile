@@ -12,4 +12,7 @@ group :development, :test do
     gem "sqlite3", "~> 2.0"
     # sesam/passkey's relying party, and its fake authenticator.
     gem "webauthn", "~> 3.4"
+    # sesam/sinatra's routes, driven as a browser would.
+    gem "rack-test", "~> 2.3"
+    gem "sinatra", "~> 4.2"
 end

@@ -66,6 +66,34 @@ request says what the proxy wrote. Signing in names no credential
 anybody which users exist; the credential's id says whose it is, and
 only one registered here counts, whatever its signature proves.
 
+## The gate in the core, the routes in Sinatra
+
+Who is calling (Access, Credential, Accept, Settings) needs a Rack env
+and nothing more, so it is in the core, for any Rack application; the
+routes need a framework, and are a Sinatra extension, loaded on its
+own like passkeys. One Settings object carries everything the gate
+and the routes read, built once; an unknown key in it is refused
+rather than ignored, a typo being a setting silently left at its
+default.
+
+sesam reaches users through a callable yielding a Sequel database:
+the application decides how it opens and locks its database, and
+sesam builds Users and Passkeys on what it is given, with the
+reserved names. The application's part of a change (an audit row)
+needs the request, so it is a helper (`sesam_changed`), not a
+callable in the settings, and it runs inside the change's transaction
+so that one is kept only with the other.
+
+An application's helpers are its own: sesam fills only the ones it
+lacks, whichever is registered first, so an API with its own
+envelope (`answer`, `refuse`) keeps it on sesam's routes. The route
+paths are fixed: a front and a schema describe them, and a prefix is
+where the application mounts its API.
+
+The application's name (`app`) names what a client sees of it: the
+realm of a 401, the header listing the ways in, the env key of its
+own requests; the cookies' names are the Session's.
+
 ## Forwarded, not X-Forwarded-For
 
 RFC 7239's header names each hop; a client can write only to the left
