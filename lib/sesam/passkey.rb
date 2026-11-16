@@ -80,6 +80,9 @@ module Sesam
                 authenticator_selection: { resident_key: "required",
                                            user_verification:
                                                "preferred" },
+                # Asked for, or Firefox on Android never passes the
+                # resident key on and the passkey cannot sign in.
+                extensions: { credProps: true },
                 # A device registered already says so rather than
                 # registering twice.
                 exclude: keys.of(name).map(&:id)

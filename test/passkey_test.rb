@@ -14,7 +14,8 @@ require "webauthn/fake_client"
 # signature that verifies proves an authenticator answered, not that
 # this deployment trusts it, that it answered our challenge, or that it
 # spoke to us.
-class PasskeyTest < Minitest::Test
+# One ceremony's refusals read best together, past the class limit.
+class PasskeyTest < Minitest::Test # rubocop:disable Metrics/ClassLength
     Passkey = Sesam::Passkey
     ORIGIN = "https://app.example.org"
 
@@ -56,6 +57,13 @@ class PasskeyTest < Minitest::Test
         assert_equal "Climat", options.rp.name
         refute_equal options.user.id,
                      @passkey.registration_for("alice", @keys).user.id
+    end
+
+    # Firefox on Android makes a discoverable passkey only when asked
+    # for credProps, under that exact camelCase key.
+    def test_registration_asks_for_cred_props
+        options = @passkey.registration_for("alice", @keys).as_json
+        assert_equal({ credProps: true }, options[:extensions])
     end
 
     def test_a_registered_passkey_signs_its_owner_in

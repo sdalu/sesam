@@ -89,6 +89,13 @@ request says what the proxy wrote. Signing in names no credential
 anybody which users exist; the credential's id says whose it is, and
 only one registered here counts, whatever its signature proves.
 
+A passkey that names no credential must be discoverable, kept by the
+authenticator, so registration requires a resident key. It also asks
+for the credProps extension, whose answer sesam never reads: Firefox
+on Android passes the resident-key requirement on to the phone only
+when credProps is asked for, and otherwise makes a passkey that
+registers but can never sign in.
+
 ## The gate in the core, the routes in Sinatra
 
 Who is calling (Access, Credential, Accept, Settings) needs a Rack env
