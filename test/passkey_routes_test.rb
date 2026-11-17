@@ -8,6 +8,9 @@ require "web_support"
 class PasskeyRoutesTest < Minitest::Test
     include WebSupport
 
+    # A moment as an answer gives it: to the millisecond, its offset said.
+    ISO_8601 = /\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}(Z|[+-]\d\d:\d\d)\z/
+
     def setup
         super
         @client = WebAuthn::FakeClient.new(ORIGIN)
@@ -111,6 +114,7 @@ class PasskeyRoutesTest < Minitest::Test
         call(:get, "/passkeys")
         listed = reply["data"]
         assert_equal([label], listed.map { it["label"] })
+        assert_match ISO_8601, listed.first["created_at"]
         listed.first["id"]
     end
 

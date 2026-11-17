@@ -48,7 +48,7 @@ module Sesam
                 rows.where(id:).delete
                 rows.insert(id:, user: name, public_key:,
                             sign_count: sign_count.to_i, label:,
-                            created_at: Time.now)
+                            created_at: Stamp.ms(Time.now))
             end
         end
 
@@ -72,6 +72,9 @@ module Sesam
 
         def rows = @db[:passkeys]
 
-        def entry(row) = Registered.new(**row.slice(*Registered.members))
+        def entry(row)
+            Registered.new(**Stamp.times(row.slice(*Registered.members),
+                                         :created_at))
+        end
     end
 end

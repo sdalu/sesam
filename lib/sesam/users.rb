@@ -65,7 +65,8 @@ module Sesam
             taken = users.where(Sequel.function(:lower, :name) =>
                                     name.downcase).get(:name)
             raise Error, "user #{taken} exists already" if taken
-            users.insert(name:, created_at: now, sessions_since: now)
+            users.insert(name:, created_at: Stamp.ms(now),
+                         sessions_since: Stamp.ms(now))
             name
         end
 
@@ -109,14 +110,14 @@ module Sesam
             found!(name)
             secret = SecureRandom.urlsafe_base64(36)
             keys.insert(user: name, digest: digest(secret), label:,
-                        created_at: now)
+                        created_at: Stamp.ms(now))
             secret
         end
 
         def keys_of(name)
             found!(name)
             keys.where(user: name).order(:id).all.map do |row|
-                Key.new(**row.slice(*Key.members))
+                Key.new(**Stamp.times(row.slice(*Key.members), :created_at))
             end
         end
 
@@ -140,13 +141,14 @@ module Sesam
         DECOY = Password.digest("not a password, ever")
         private_constant :DECOY
 
-        def row_of(row, now)
+        def row_of(row, now) # rubocop:disable Metrics/AbcSize
             name = row[:name]
-            Row.new(**row.slice(:name, :created_at),
+            Row.new(**Stamp.times(row.slice(:name, :created_at), :created_at),
                     password: !row[:password].nil?,
                     keys: keys.where(user: name).count,
                     passkeys: @db[:passkeys].where(user: name).count,
-                    invite: open_invites(name, now).get(:expires_at),
+                    invite: Stamp.time(open_invites(name, now)
+                                       .get(:expires_at)),
                     addresses: addresses_of(name))
         end
 

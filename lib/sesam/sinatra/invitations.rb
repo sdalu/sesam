@@ -27,12 +27,14 @@ module Sesam
             module Helpers
                 # Whose invitation this is, without spending it: the page
                 # greets them before they choose a password or a passkey.
-                def invitation_read
+                def invitation_read # rubocop:disable Metrics/AbcSize
                     invite = invited!
                     password = sesam.with_users { it.password?(invite.user) }
                     answer(profiled(invite.user,
                                     { name: invite.user,
-                                      expires_at: invite.expires_at, password:,
+                                      expires_at:
+                                          invite.expires_at.xmlschema(3),
+                                      password:,
                                       origin: sesam.passkey&.origin,
                                       sign_in: sesam.accept.sign_in }))
                 end

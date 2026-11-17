@@ -16,6 +16,14 @@ class PasskeysTest < Minitest::Test
                            label: "phone")
     end
 
+    def test_a_passkey_is_dated_when_registered
+        before = Sesam::Stamp.ms(Time.now)
+        @keys.add("bob", id: "c2", public_key: "pk", sign_count: 0,
+                         label: "laptop")
+        dated = Sesam::Stamp.ms(@keys.find("bob", "c2").created_at)
+        assert_includes before..Sesam::Stamp.ms(Time.now), dated
+    end
+
     def test_a_credential_is_its_owner_s
         assert_equal "alice", @keys.owner_of("c1")
         assert_nil @keys.find("bob", "c1")

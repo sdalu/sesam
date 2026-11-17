@@ -24,9 +24,10 @@ module Sesam
                 found!(name)
                 token = SecureRandom.urlsafe_base64(32)
                 @db.transaction do
-                    open_invites(name, now).update(used_at: now)
+                    open_invites(name, now).update(used_at: Stamp.ms(now))
                     invites.insert(user: name, digest: digest(token),
-                                   created_at: now, expires_at: now + seconds)
+                                   created_at: Stamp.ms(now),
+                                   expires_at: Stamp.ms(now + seconds))
                     yield token if block_given?
                 end
                 token
@@ -37,8 +38,10 @@ module Sesam
             def invitation(token, now: Time.now)
                 return nil if token.to_s.empty?
                 row = invites.where(digest: digest(token), used_at: nil)
-                             .where { expires_at > now }.first
-                row && Invite.new(**row.slice(*Invite.members))
+                             .where { expires_at > Stamp.ms(now) }.first
+                row && Invite.new(**Stamp.times(row.slice(*Invite.members),
+                                                :created_at, :expires_at,
+                                                :used_at))
             end
 
             # Spends `token`, once: the block, given its user, runs in the
@@ -51,7 +54,7 @@ module Sesam
                     invite = invitation(token, now:)
                     next nil unless invite
                     spent = invites.where(id: invite.id, used_at: nil)
-                                   .update(used_at: now)
+                                   .update(used_at: Stamp.ms(now))
                     next nil unless spent == 1
                     yield invite.user if block_given?
                     invite.user
@@ -62,7 +65,7 @@ module Sesam
 
             def open_invites(name, now)
                 invites.where(user: name, used_at: nil)
-                       .where { expires_at > now }
+                       .where { expires_at > Stamp.ms(now) }
             end
 
             def invites = @db[:invites]

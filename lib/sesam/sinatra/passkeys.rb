@@ -46,7 +46,7 @@ module Sesam
                     name = named!
                     answer(passkey_keys { it.of(name) }.map do |key|
                         { id: key.id, label: key.label,
-                          created_at: key.created_at }
+                          created_at: key.created_at.xmlschema(3) }
                     end)
                 end
 

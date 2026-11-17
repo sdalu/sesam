@@ -21,6 +21,14 @@ class SessionsTest < Minitest::Test
         assert_equal 200, call(:post, "/session/invite/check", { token: })
     end
 
+    # When it lapses, to the millisecond, its offset said (ISO 8601).
+    def test_an_invitation_read_says_when_it_lapses
+        token = users.invite("alice")
+        call(:post, "/session/invite/check", { token: })
+        assert_equal users.invitation(token).expires_at.xmlschema(3),
+                     reply.dig("data", "expires_at")
+    end
+
     # Spent once on a password, which signs no one in; the application
     # told in the transaction, then notified.
     # A profile never speaks for sesam: one naming a key of sesam's
@@ -71,7 +79,7 @@ class SessionsTest < Minitest::Test
             call(:put, "/session/password",
                  { current: PASSWORD, password: "z" * 12 })
             assert_equal 200, call(:get, "/secret")
-            before = Sesam::Session.ms(Time.now) - 1000
+            before = Sesam::Stamp.ms(Time.now) - 1000
             refute users.session_valid?("alice", before)
         end
         assert_equal [:notify, "alice", :password], @told.last

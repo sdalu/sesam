@@ -21,7 +21,7 @@ module Sesam
                 end
                 @db[:user_addresses].where(address: ip.to_s).delete
                 @db[:user_addresses].insert(address: ip.to_s, user: name,
-                                            created_at: now)
+                                            created_at: Stamp.ms(now))
             end
 
             def unaddress!(name, address)
@@ -47,7 +47,7 @@ module Sesam
             # longer count (a password set or reset, a sign-out everywhere).
             def end_sessions!(name, now: Time.now)
                 found!(name)
-                users.where(name:).update(sessions_since: now)
+                users.where(name:).update(sessions_since: Stamp.ms(now))
             end
 
             # Whether a session given to `name` at `issued` (milliseconds)
@@ -57,8 +57,7 @@ module Sesam
             def session_valid?(name, issued)
                 row = users.where(name: name.to_s).first
                 return false unless row
-                since = row[:sessions_since]
-                issued >= (since.to_r * 1000).floor
+                issued >= row[:sessions_since].to_i
             end
 
             private

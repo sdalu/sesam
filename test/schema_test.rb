@@ -62,7 +62,48 @@ class SchemaTest < Minitest::Test
                                            .dig(:public_key, :db_type)
     end
 
+    # ClimatControl's rows, its times read as the same moments in
+    # milliseconds where nothing is set; a moment not yet come stays
+    # missing.
+    def test_times_become_milliseconds
+        db = migrated_from_utc_times
+        assert_equal [[ms(T), ms(T)]],
+                     db[:users].select_map(%i[sessions_since created_at])
+        assert_equal [[ms(T), ms(T + 60), nil]],
+                     db[:invites].select_map(%i[created_at expires_at used_at])
+    end
+
+    def test_a_moment_left_out_is_refused
+        db = migrated_from_utc_times
+        assert_raises(Sequel::NotNullConstraintViolation) do
+            db[:passkeys].insert(id: "c1", user: "alice", public_key: "pk",
+                                 label: "phone")
+        end
+    end
+
     private
+
+    def ms(time) = Sesam::Stamp.ms(time)
+
+    # Version 2 written as ClimatControl writes it, keeping UTC, and
+    # migrated there; returned with nothing set.
+    def migrated_from_utc_times
+        Sequel.database_timezone = :utc
+        db = Sequel.sqlite
+        Sequel::Migrator.run(db, Sesam::Schema::DIRECTORY,
+                             target: 2, table: Sesam::Schema::TABLE)
+        alice_invited(db)
+        Sesam.migrate(db)
+        db
+    ensure
+        Sequel.database_timezone = nil
+    end
+
+    def alice_invited(db)
+        db[:users].insert(name: "alice", created_at: T, sessions_since: T)
+        db[:invites].insert(user: "alice", digest: "d", created_at: T,
+                            expires_at: T + 60)
+    end
 
     # sesam's migration `number`, loaded on its own.
     def migration(number)

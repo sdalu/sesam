@@ -64,6 +64,20 @@ only what a database needs: a passkey's public key made text where a
 String has a length (MySQL), SQLite left as it is, since copying a
 table anew to change a length it ignores is a risk for nothing.
 
+Every moment sesam keeps is an integer, milliseconds since the epoch,
+never a time column. A time column reads through the Sequel timezone
+of the process reading it, a setting that belongs to the host and
+that a console or a script may lack: rows written as UTC and read as
+local time shift by the offset, and an ended session counts for an
+hour more. An integer reads the same everywhere. Milliseconds, not
+seconds, because sessions are stamped to the millisecond: in seconds,
+a session given earlier in the very second its user's sessions were
+ended would still count. The migration that made them integers reads
+each old time as the migrating process reads it, so it is right only
+where the host migrates with the setting its rows were written with;
+nothing in a naive time says which that was. Answers give a moment as
+ISO 8601 to the millisecond, its offset said.
+
 A user's name is theirs whatever its case: a name differing from
 another by case alone is refused, as reserved names are compared,
 since nobody reading an audit tells them apart, and a database

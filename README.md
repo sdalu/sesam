@@ -197,7 +197,14 @@ application knows of a person (names, an email address) goes in a
 table of its own keyed by `user`, a foreign key to `users` cascading
 on delete, migrated after sesam's. A passkey's `public_key` is text
 where a String would be `varchar(255)` (MySQL), an RSA key being
-longer; SQLite's table is left as it is.
+longer; SQLite's table is left as it is. Every moment (`created_at`,
+`sessions_since`, an invitation's `expires_at` and `used_at`) is an
+integer, milliseconds since the epoch, read the same whatever Sequel
+timezone a process sets; sesam's objects give it back as a `Time`,
+and its answers as ISO 8601 (`2026-11-17T13:50:46.640+01:00`).
+Migrating a database whose moments were times reads each as the
+migrating process does: run it with the Sequel timezone they were
+written with, and on SQLite 3.35 or later.
 
 A name is refused when a user's differs from it by case alone, and a
 `reserved` one (strings or symbols) whatever its case.
@@ -468,8 +475,5 @@ itself. A failure there is said on the server's output.
 - A link asked for is mailed inside its invitation's transaction (kept
   only if it reached its user), so on SQLite other writers wait for the
   mail, and fail past the busy timeout (Sequel's 5 s by default).
-- On MySQL, times are kept to the second unless the connection sets
-  `fractional_seconds`: a session given less than a second before a
-  user's sessions are ended still counts.
 - On MySQL, a passkey's credential id is `varchar(255)`, which an
   authenticator making longer ids would not fit.

@@ -56,7 +56,7 @@ module Sesam
         # sent in clear; HttpOnly, away from scripts; SameSite=Lax, not
         # spent by another site's request.
         def cookie_for(name, mount, now: Time.now)
-            held = "#{name}:#{Session.ms(now)}"
+            held = "#{name}:#{Stamp.ms(now)}"
             attributes(stamp(held, now + @lifetime), mount, @lifetime)
         end
 
@@ -73,9 +73,6 @@ module Sesam
         rescue ArgumentError, TypeError
             nil
         end
-
-        # A time in whole milliseconds, as sessions are stamped.
-        def self.ms(time) = (time.to_r * 1000).floor
 
         # The cookie carrying a ceremony's challenge.
         def challenge_cookie(challenge, mount, now: Time.now)

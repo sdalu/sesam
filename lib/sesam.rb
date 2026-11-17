@@ -2,6 +2,7 @@
 
 require "sesam/version"
 require "sesam/password"
+require "sesam/stamp"
 require "sesam/session"
 require "sesam/forwarded"
 require "sesam/throttle"

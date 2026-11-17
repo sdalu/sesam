@@ -139,5 +139,5 @@ class UsersTest < Minitest::Test
 
     private
 
-    def ms(time) = Sesam::Session.ms(time)
+    def ms(time) = Sesam::Stamp.ms(time)
 end

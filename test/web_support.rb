@@ -44,7 +44,7 @@ module WebSupport
         users.add(name)
         @db[:user_keys].insert(
             user: name, digest: OpenSSL::Digest.hexdigest("SHA256", key),
-            created_at: Time.now
+            created_at: Sesam::Stamp.ms(Time.now)
         )
     end
 
