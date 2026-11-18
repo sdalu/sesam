@@ -98,13 +98,22 @@ module WebSupport
             Class.new(Sinatra::Base) do
                 register Sesam::Sinatra
                 set :sesam, sesam
-                set :host_authorization, { permitted_hosts: [] }
-                set :show_exceptions, false
-                set :raise_errors, true
+                TestApp.settings(self)
                 TestApp.gate(self)
                 get("/secret") { answer({ who: }) }
                 TestApp.hooks(self, told, profiles)
             end
+        end
+
+        # Any host, errors raised. Sinatra's JSON CSRF guard refuses a
+        # cross-site read of JSON by itself (a request with no Referer):
+        # off here, so that what these tests see of a cross-site request
+        # is sesam's gate.
+        def self.settings(app)
+            app.set :host_authorization, { permitted_hosts: [] }
+            app.set :show_exceptions, false
+            app.set :raise_errors, true
+            app.set :protection, except: :json_csrf
         end
 
         # The gate as an application sets it: cross-site writes, then
