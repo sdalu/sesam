@@ -179,6 +179,7 @@ users.add("alice")
 token = users.invite("alice")          # shown once; its digest kept
 users.redeem(token) { users.password!(it, "a long enough password") }
 users.password_match?("alice", "a long enough password")  # => true
+users.unpassword!("alice")             # even their last way in
 key = users.key("alice", label: "script")                 # shown once
 users.key_owner(key)                                      # => "alice"
 users.address!("alice", "192.0.2.7")   # a LAN caller named, not proved

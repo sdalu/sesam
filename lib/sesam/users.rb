@@ -93,6 +93,14 @@ module Sesam
             users.where(name:).update(password: Password.digest(password))
         end
 
+        # `name`'s password gone, even their last way in: sessions are
+        # left to the caller to end. Nothing to check, a password not
+        # being set.
+        def unpassword!(name)
+            found!(name)
+            users.where(name:).update(password: nil)
+        end
+
         def password?(name) = !users.where(name:).get(:password).nil?
 
         # Whether `password` is `name`'s; false for no such user or no

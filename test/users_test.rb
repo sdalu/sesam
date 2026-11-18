@@ -3,7 +3,8 @@
 require "test_helper"
 
 # Users in the database: names, invitations spent once, keys kept as
-# digests, passwords as scrypt hashes, and what goes with a user removed.
+# digests, and what goes with a user removed (passwords:
+# UserPasswordsTest).
 class UsersTest < Minitest::Test
     Users = Sesam::Users
     NOW = Time.new(2026, 11, 15, 10, 0)
@@ -63,16 +64,6 @@ class UsersTest < Minitest::Test
     def test_an_invitation_is_kept_as_a_digest
         token = @users.invite("alice", now: NOW)
         refute_includes @db[:invites].select_map(:digest), token
-    end
-
-    def test_passwords_are_kept_as_scrypt_hashes
-        @users.password!("alice", "a long enough password")
-        kept = @db[:users].where(name: "alice").get(:password)
-        assert_match(/\Ascrypt\$16384\$8\$1\$/, kept)
-        refute_includes kept, "long enough"
-        assert @users.password_match?("alice", "a long enough password")
-        refute @users.password_match?("alice", "a long enough passwore")
-        refute @users.password_match?("carol", "a long enough password")
     end
 
     def test_a_key_is_shown_once_and_kept_as_a_digest
