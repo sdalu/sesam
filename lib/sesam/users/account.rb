@@ -13,32 +13,31 @@ module Sesam
             # loopback, which is every caller through a socket or a
             # proxy on this machine.
             def address!(name, address, now: Time.now)
-                found!(name)
-                ip = ip_of(address)
-                if ip.loopback?
-                    raise Error, "#{ip} is every caller through a socket " \
-                                 "or a proxy here: not one person's"
+                ip = person_ip(address)
+                @store.transaction do
+                    name = found!(name)
+                    @store.delete(:user_addresses, address: ip.to_s)
+                    @store.insert(:user_addresses,
+                                  { address: ip.to_s, user: name,
+                                    created_at: Stamp.ms(now) })
                 end
-                @db[:user_addresses].where(address: ip.to_s).delete
-                @db[:user_addresses].insert(address: ip.to_s, user: name,
-                                            created_at: Stamp.ms(now))
             end
 
             def unaddress!(name, address)
-                gone = @db[:user_addresses]
-                       .where(user: name.to_s, address: ip_of(address).to_s)
-                       .delete
+                gone = @store.delete(:user_addresses,
+                                     user: name.to_s,
+                                     address: ip_of(address).to_s)
                 raise Error, "#{name} is not known at #{address}" if gone.zero?
             end
 
             def addresses_of(name)
-                @db[:user_addresses].where(user: name.to_s).order(:address)
-                                    .select_map(:address)
+                @store.all(:user_addresses, order: [:address], user: name.to_s)
+                      .map { it[:address] }
             end
 
             # Whose LAN address `peer` is, or nil.
             def address_owner(peer)
-                @db[:user_addresses].where(address: ip_of(peer).to_s).get(:user)
+                get(:user_addresses, :user, address: ip_of(peer).to_s)
             rescue Error
                 nil
             end
@@ -46,8 +45,8 @@ module Sesam
             # Every session `name` holds, ended: those given before now no
             # longer count (a password set or reset, a sign-out everywhere).
             def end_sessions!(name, now: Time.now)
-                found!(name)
-                users.where(name:).update(sessions_since: Stamp.ms(now))
+                name = found!(name)
+                @store.update(:users, { sessions_since: Stamp.ms(now) }, name:)
             end
 
             # Whether a session given to `name` at `issued` (milliseconds)
@@ -55,12 +54,22 @@ module Sesam
             # they were added (a name removed and added again holds none of
             # the old ones).
             def session_valid?(name, issued)
-                row = users.where(name: name.to_s).first
+                row = @store.first(:users, name: name.to_s)
                 return false unless row
                 issued >= row[:sessions_since].to_i
             end
 
             private
+
+            # `address` as one person's: Error for loopback, which is
+            # every caller through a socket or a proxy here.
+            def person_ip(address)
+                ip_of(address).tap do |ip|
+                    next unless ip.loopback?
+                    raise Error, "#{ip} is every caller through a socket " \
+                                 "or a proxy here: not one person's"
+                end
+            end
 
             def ip_of(address)
                 IPAddr.new(address.to_s).tap do |ip|

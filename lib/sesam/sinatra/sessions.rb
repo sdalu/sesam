@@ -117,21 +117,21 @@ module Sesam
                 # The block's change to `name`'s way in, their sessions
                 # ended unless `sessions` is false, told the application, in
                 # one transaction.
-                def reset!(db, users, name, sessions: true)
-                    db.transaction do
+                def reset!(store, users, name, sessions: true)
+                    store.transaction do
                         yield
                         users.end_sessions!(name) if sessions
-                        sesam_changed(name, db)
+                        sesam_changed(name, store)
                     end
                 end
 
                 # Set after the current one is checked; one refused is a
                 # 422 saying why.
                 def changed_password(name, password)
-                    sesam.database do |db|
-                        users = sesam.users_in(db)
+                    sesam.store do |store|
+                        users = sesam.users_in(store)
                         current!(users, name)
-                        reset!(db, users, name) do
+                        reset!(store, users, name) do
                             users.password!(name, password)
                         end
                     end

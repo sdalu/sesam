@@ -47,8 +47,9 @@ class StampTest < Minitest::Test
         Sesam.migrate(db)
         Sequel.database_timezone = :utc
         Sequel.application_timezone = :local
-        Sesam::Users.new(db).add("alice", now: NOW)
-        Sesam::Passkeys.new(db).tap do |keys|
+        store = Sesam::SequelStore.new(db)
+        Sesam::Users.new(store).add("alice", now: NOW)
+        Sesam::Passkeys.new(store).tap do |keys|
             keys.add("alice", id: "c1", public_key: "pk", sign_count: 0,
                               label: "phone")
         end

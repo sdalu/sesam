@@ -25,7 +25,7 @@ module Sesam
     # What the application may define, else sesam's default is used
     # (Replies, Hooks): `answer`, `refuse` (raising: a refusal must roll
     # back the transaction it crosses), `parsed_body`, and the hooks
-    # `sesam_changed(name, db)` (in the transaction where a user changed
+    # `sesam_changed(name, store)` (in the transaction where a user changed
     # their way in), `sesam_notify(name, kind)` (after it, :password or
     # :passkey) and `sesam_profile(name)` (a Hash merged into what
     # GET /session and an invitation's check answer). A method the

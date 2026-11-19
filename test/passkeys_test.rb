@@ -6,12 +6,11 @@ require "test_helper"
 # its owner only.
 class PasskeysTest < Minitest::Test
     def setup
-        @db = Sequel.sqlite
-        Sesam.migrate(@db)
-        users = Sesam::Users.new(@db)
+        @store = TestStore.fresh
+        users = Sesam::Users.new(@store)
         users.add("alice")
         users.add("bob")
-        @keys = Sesam::Passkeys.new(@db)
+        @keys = Sesam::Passkeys.new(@store)
         @keys.add("alice", id: "c1", public_key: "pk", sign_count: 3,
                            label: "phone")
     end
@@ -22,6 +21,17 @@ class PasskeysTest < Minitest::Test
                          label: "laptop")
         dated = Sesam::Stamp.ms(@keys.find("bob", "c2").created_at)
         assert_includes before..Sesam::Stamp.ms(Time.now), dated
+    end
+
+    # None kept for a name no user has: a user added later under it
+    # would inherit it.
+    def test_a_passkey_for_no_user_is_refused
+        assert_raises(Sesam::Passkeys::Error) do
+            @keys.add("ghost", id: "c9", public_key: "pk", sign_count: 0,
+                               label: "phone")
+        end
+        Sesam::Users.new(@store).add("ghost")
+        assert_empty @keys.of("ghost")
     end
 
     def test_a_credential_is_its_owner_s
@@ -51,6 +61,14 @@ class PasskeysTest < Minitest::Test
                                label: "tablet")
         end
         assert_equal "alice", @keys.owner_of("c1")
+    end
+
+    # A database is given wrapped, as a store: bare, it is refused.
+    def test_a_bare_database_is_refused
+        error = assert_raises(Sesam::Error) do
+            Sesam::Passkeys.new(Sequel.sqlite)
+        end
+        assert_match(/SequelStore/, error.message)
     end
 
     # A lost device's, all of a user's at once; others' kept.

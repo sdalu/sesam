@@ -2,17 +2,17 @@
 
 require "test_helper"
 
-# Users in the database: names, invitations spent once, keys kept as
+# Users in a store: names, invitations spent once, keys kept as
 # digests, and what goes with a user removed (passwords:
-# UserPasswordsTest).
+# UserPasswordsTest; a removal on a store that does not cascade,
+# and a database given bare: UsersRemovalTest).
 class UsersTest < Minitest::Test
     Users = Sesam::Users
     NOW = Time.new(2026, 11, 15, 10, 0)
 
     def setup
-        @db = Sequel.sqlite
-        Sesam.migrate(@db)
-        @users = Users.new(@db, reserved: %w[root])
+        @store = TestStore.fresh
+        @users = Users.new(@store, reserved: %w[root])
         @users.add("alice", now: NOW)
     end
 
@@ -23,9 +23,9 @@ class UsersTest < Minitest::Test
             assert_raises(Users::Error, name) { @users.add(name) }
         end
         assert_raises(Users::Error) do
-            Users.new(@db, reserved: %i[system]).add("System")
+            Users.new(@store, reserved: %i[system]).add("System")
         end
-        assert_equal "root", Users.new(@db).add("root")
+        assert_equal "root", Users.new(@store).add("root")
     end
 
     def test_an_invitation_is_spent_once
@@ -63,13 +63,13 @@ class UsersTest < Minitest::Test
     # An invitation's token is kept as its digest only.
     def test_an_invitation_is_kept_as_a_digest
         token = @users.invite("alice", now: NOW)
-        refute_includes @db[:invites].select_map(:digest), token
+        refute_includes digests(:invites), token
     end
 
     def test_a_key_is_shown_once_and_kept_as_a_digest
         key = @users.key("alice", label: "script", now: NOW)
         assert_equal "alice", @users.key_owner(key)
-        refute_includes @db[:user_keys].select_map(:digest), key
+        refute_includes digests(:user_keys), key
         id = @users.keys_of("alice").first.id
         @users.unkey("alice", id)
         assert_nil @users.key_owner(key)
@@ -82,11 +82,11 @@ class UsersTest < Minitest::Test
         key = @users.key("alice")
         @users.invite("alice")
         @users.address!("alice", "192.0.2.7")
-        Sesam::Passkeys.new(@db).add("alice", id: "c1", public_key: "pk",
-                                              sign_count: 0, label: "phone")
+        Sesam::Passkeys.new(@store).add("alice", id: "c1", public_key: "pk",
+                                                 sign_count: 0, label: "phone")
         @users.remove("alice")
         assert_nil @users.key_owner(key)
-        counts = %i[invites user_addresses passkeys].map { @db[it].count }
+        counts = %i[invites user_addresses passkeys].map { @store.count(it) }
         assert_equal [0, 0, 0], counts
     end
 
@@ -131,4 +131,6 @@ class UsersTest < Minitest::Test
     private
 
     def ms(time) = Sesam::Stamp.ms(time)
+
+    def digests(table) = @store.all(table).map { it[:digest] }
 end

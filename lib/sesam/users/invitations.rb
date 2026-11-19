@@ -21,13 +21,11 @@ module Sesam
             # shown once: given to the block too, in the transaction, so
             # that what fails there (a mail) leaves nothing issued.
             def invite(name, seconds: INVITE_FOR, now: Time.now)
-                found!(name)
                 token = SecureRandom.urlsafe_base64(32)
-                @db.transaction do
-                    open_invites(name, now).update(used_at: Stamp.ms(now))
-                    invites.insert(user: name, digest: digest(token),
-                                   created_at: Stamp.ms(now),
-                                   expires_at: Stamp.ms(now + seconds))
+                @store.transaction do
+                    name = found!(name)
+                    withdraw(name, now)
+                    @store.insert(:invites, issued(name, token, now, seconds))
                     yield token if block_given?
                 end
                 token
@@ -37,8 +35,8 @@ module Sesam
             # lapsed alike.
             def invitation(token, now: Time.now)
                 return nil if token.to_s.empty?
-                row = invites.where(digest: digest(token), used_at: nil)
-                             .where { expires_at > Stamp.ms(now) }.first
+                row = @store.all(:invites, digest: digest(token), used_at: nil)
+                            .find { open?(it, now) }
                 row && Invite.new(**Stamp.times(row.slice(*Invite.members),
                                                 :created_at, :expires_at,
                                                 :used_at))
@@ -50,11 +48,11 @@ module Sesam
             # The user, or nil for a token not open; two redeeming at once,
             # one wins.
             def redeem(token, now: Time.now)
-                @db.transaction do
+                @store.transaction do
                     invite = invitation(token, now:)
                     next nil unless invite
-                    spent = invites.where(id: invite.id, used_at: nil)
-                                   .update(used_at: Stamp.ms(now))
+                    spent = @store.update(:invites, { used_at: Stamp.ms(now) },
+                                          id: invite.id, used_at: nil)
                     next nil unless spent == 1
                     yield invite.user if block_given?
                     invite.user
@@ -64,11 +62,25 @@ module Sesam
             private
 
             def open_invites(name, now)
-                invites.where(user: name, used_at: nil)
-                       .where { expires_at > Stamp.ms(now) }
+                @store.all(:invites, user: name, used_at: nil)
+                      .select { open?(it, now) }
             end
 
-            def invites = @db[:invites]
+            def open?(row, now) = row[:expires_at] > Stamp.ms(now)
+
+            # The row of `name`'s invitation by `token`, issued `now`.
+            def issued(name, token, now, seconds)
+                { user: name, digest: digest(token), created_at: Stamp.ms(now),
+                  expires_at: Stamp.ms(now + seconds) }
+            end
+
+            # The invitations still open for `name`, marked used.
+            def withdraw(name, now)
+                open_invites(name, now).each do |row|
+                    @store.update(:invites, { used_at: Stamp.ms(now) },
+                                  id: row[:id])
+                end
+            end
         end
     end
 end

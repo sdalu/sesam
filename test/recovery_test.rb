@@ -42,7 +42,7 @@ class RecoveryTest < Minitest::Test
         [ask("carol"), ask("bruno")].each { assert_equal 202, it }
         assert_equal ASKED, reply
         refute_nil users.invitation(open)
-        assert_equal 1, @db[:invites].count
+        assert_equal 1, @store.count(:invites)
     end
 
     def test_a_link_lasts_an_hour
@@ -92,7 +92,7 @@ class RecoveryTest < Minitest::Test
         assert_predicate handover, :alive?
         mailed << true
         handover.join
-        assert_equal 1, @db[:invites].count
+        assert_equal 1, @store.count(:invites)
     end
 
     # A hand-over that fails is said on the server's output, no link
@@ -102,7 +102,7 @@ class RecoveryTest < Minitest::Test
         assert_output(nil, /no link for alice: IOError: no mail/) do
             assert_equal 202, ask("alice")
         end
-        assert_equal 0, @db[:invites].count
+        assert_equal 0, @store.count(:invites)
     end
 
     private

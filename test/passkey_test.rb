@@ -20,11 +20,10 @@ class PasskeyTest < Minitest::Test # rubocop:disable Metrics/ClassLength
     ORIGIN = "https://app.example.org"
 
     def setup
-        @db = Sequel.sqlite
-        Sesam.migrate(@db)
-        @users = Sesam::Users.new(@db)
+        @store = TestStore.fresh
+        @users = Sesam::Users.new(@store)
         %w[alice bruno].each { @users.add(it) }
-        @keys = Sesam::Passkeys.new(@db)
+        @keys = Sesam::Passkeys.new(@store)
         @passkey = Passkey.new(ORIGIN)
         @authenticator = WebAuthn::FakeAuthenticator.new
         @client = WebAuthn::FakeClient.new(ORIGIN,

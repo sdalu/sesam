@@ -6,15 +6,14 @@ require "test_helper"
 # and removed, even when it is their last way in.
 class UserPasswordsTest < Minitest::Test
     def setup
-        @db = Sequel.sqlite
-        Sesam.migrate(@db)
-        @users = Sesam::Users.new(@db)
+        @store = TestStore.fresh
+        @users = Sesam::Users.new(@store)
         @users.add("alice")
         @users.password!("alice", "a long enough password")
     end
 
     def test_passwords_are_kept_as_scrypt_hashes
-        kept = @db[:users].where(name: "alice").get(:password)
+        kept = @store.first(:users, name: "alice")[:password]
         assert_match(/\Ascrypt\$16384\$8\$1\$/, kept)
         refute_includes kept, "long enough"
         assert @users.password_match?("alice", "a long enough password")

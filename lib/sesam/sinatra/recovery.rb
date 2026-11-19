@@ -85,12 +85,11 @@ module Sesam
                 # handed it over, and then told it (sesam_asked) in the
                 # same transaction.
                 def invited(name)
-                    sesam.database do |db|
+                    sesam.store do |store|
                         seconds = sesam.recovery_for
-                        sesam.users_in(db).invite(name, seconds:) do |token|
-                            raise Sequel::Rollback unless
-                                sesam_reached?(name, token)
-                            sesam_asked(name, db)
+                        sesam.users_in(store).invite(name, seconds:) do |token|
+                            store.rollback! unless sesam_reached?(name, token)
+                            sesam_asked(name, store)
                         end
                     end
                 end

@@ -2,7 +2,7 @@
 
 module Sesam
     # What an application tells sesam, in one place: where its users are
-    # (`database`, a callable yielding a Sequel database to its block),
+    # (`store`, a store or a callable yielding one to its block),
     # its trusted networks (`lan`) and proxies (`proxies`, each a list
     # or Networks), what a caller
     # may present (`accept`), the cookie path (`mount`), the Session and
@@ -14,7 +14,7 @@ module Sesam
         # A setting no gate could work with.
         class Error < Sesam::Error; end
 
-        # Each setting but `database`, as it is unless given.
+        # Each setting but `store`, as it is unless given.
         DEFAULTS = { lan: [], proxies: [], accept: Accept::ALL, mount: "",
                      session: nil, passkey: nil, throttle: nil,
                      reserved: [], app: "sesam", reset_passkeys: "keep",
@@ -35,8 +35,8 @@ module Sesam
         # quarter of an hour's unless given. passkey: kept only where
         # passkeys are accepted, and refused without a session (a passkey
         # signs in to a session).
-        def initialize(database:, **given)
-            @database = callable!(database)
+        def initialize(store:, **given)
+            @store = store_of(store)
             set = settings!(given)
             network!(set)
             ways!(set)
@@ -45,15 +45,15 @@ module Sesam
             freeze
         end
 
-        # The database, given to the block.
-        def database(&) = @database.call(&)
+        # The store, given to the block.
+        def store(&) = @store.call(&)
 
-        # Users and Passkeys in `db`.
-        def users_in(db) = Users.new(db, reserved: @reserved)
-        def passkeys_in(db) = Passkeys.new(db)
+        # Users and Passkeys in `store`.
+        def users_in(store) = Users.new(store, reserved: @reserved)
+        def passkeys_in(store) = Passkeys.new(store)
 
-        # Users, given to the block, in the database.
-        def with_users = database { yield users_in(it) }
+        # Users, given to the block, in the store.
+        def with_users = store { yield users_in(it) }
 
         def lan?(address) = @lan.include?(address)
 
@@ -114,9 +114,18 @@ module Sesam
 
         def accept_of(given) = given.is_a?(Accept) ? given : Accept.new(given)
 
-        def callable!(database)
-            return database if database.respond_to?(:call)
-            raise Error, "database: a callable yielding a Sequel database"
+        # A store, as a callable yielding it, the same each time. A
+        # database given bare is refused here, not at the first request
+        # (it answers `call`, though not as a store's callable).
+        def store_of(store)
+            if STORE.all? { store.respond_to?(it) }
+                return ->(&block) { block.call(store) }
+            end
+            if store.respond_to?(:call) && !store.respond_to?(:transaction)
+                return store
+            end
+            raise Error, "store: a store, or a callable yielding one; a " \
+                         "Sequel database is given as SequelStore.new(db)"
         end
 
         def passkey_of(passkey)

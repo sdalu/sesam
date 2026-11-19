@@ -4,11 +4,12 @@ require "openssl"
 require "securerandom"
 
 require "sesam/password"
+require "sesam/users/passwords"
 require "sesam/users/invitations"
 require "sesam/users/account"
 
 module Sesam
-    # Who may use the application, kept in its database (Sequel, the
+    # Who may use the application, kept in a store (Sesam.store!, the
     # tables of Sesam.migrate): a user is a name, their login, who signs
     # in with a password or a passkey set through an invitation (a
     # single-use link, Users#invite), or sends an API key (Users#key).
@@ -27,15 +28,19 @@ module Sesam
 
         Key = Data.define(:id, :user, :label, :created_at)
         include Invitations
+        include Passwords
         include Account
+
+        # What is a user's, gone with them (#remove).
+        OWNED = %i[user_keys user_addresses invites passkeys].freeze
 
         Row = Data.define(:name, :password, :created_at, :keys, :passkeys,
                           :invite, :addresses)
 
         # reserved: names no user may take, whatever their case;
         # strings or symbols.
-        def initialize(db, reserved: [])
-            @db = db
+        def initialize(store, reserved: [])
+            @store = Sesam.store!(store)
             @reserved = reserved.map { it.to_s.downcase }.freeze
         end
 
@@ -51,86 +56,65 @@ module Sesam
             text
         end
 
-        def exists?(name) = !users.where(name: name.to_s).empty?
+        def exists?(name) = @store.count(:users, name: name.to_s).positive?
 
-        def names = users.order(:name).select_map(:name)
+        def names = @store.all(:users, order: [:name]).map { it[:name] }
 
-        def any? = !users.empty?
+        def any? = @store.count(:users).positive?
 
         # A name is refused when it differs from a user's by case alone:
         # two such would be told apart by nobody reading an audit, and a
         # database comparing without case would take one for the other.
         def add(name, now: Time.now)
             name = Users.name!(name, reserved: @reserved)
-            taken = users.where(Sequel.function(:lower, :name) =>
-                                    name.downcase).get(:name)
-            raise Error, "user #{taken} exists already" if taken
-            users.insert(name:, created_at: Stamp.ms(now),
-                         sessions_since: Stamp.ms(now))
+            @store.transaction do
+                free!(name)
+                @store.insert(:users, { name:, created_at: Stamp.ms(now),
+                                        sessions_since: Stamp.ms(now) })
+            end
             name
         end
 
         # The user gone, and with them their keys, invitations, passkeys
         # and sessions (whoever reads a session asks whether its name
-        # exists).
+        # exists). Taken here, in one transaction: a store need not
+        # cascade.
         def remove(name)
-            found!(name)
-            users.where(name:).delete
+            name = found!(name)
+            @store.transaction do
+                OWNED.each { @store.delete(it, user: name) }
+                @store.delete(:users, name:)
+            end
         end
 
         # Each user: password set or not, keys, passkeys, an invitation
         # open (its expiry), nil for none.
         def list(now: Time.now)
-            users.order(:name).all.map { row_of(it, now) }
-        end
-
-        # --- passwords ----------------------------------------------
-
-        def password!(name, password)
-            found!(name)
-            refusal = Password.refusal(password)
-            raise Error, refusal if refusal
-            users.where(name:).update(password: Password.digest(password))
-        end
-
-        # `name`'s password gone, even their last way in: sessions are
-        # left to the caller to end. Nothing to check, a password not
-        # being set.
-        def unpassword!(name)
-            found!(name)
-            users.where(name:).update(password: nil)
-        end
-
-        def password?(name) = !users.where(name:).get(:password).nil?
-
-        # Whether `password` is `name`'s; false for no such user or no
-        # password, after as much work as a real check.
-        def password_match?(name, password)
-            kept = users.where(name: name.to_s).get(:password)
-            return Password.match?(password, DECOY) && false unless kept
-            Password.match?(password, kept)
+            @store.all(:users, order: [:name]).map { row_of(it, now) }
         end
 
         # --- API keys -----------------------------------------------
 
         # A new key for `name`: shown once, never again.
         def key(name, label: nil, now: Time.now)
-            found!(name)
             secret = SecureRandom.urlsafe_base64(36)
-            keys.insert(user: name, digest: digest(secret), label:,
-                        created_at: Stamp.ms(now))
+            @store.transaction do
+                name = found!(name)
+                @store.insert(:user_keys, { user: name, digest: digest(secret),
+                                            label:, created_at: Stamp.ms(now) })
+            end
             secret
         end
 
         def keys_of(name)
-            found!(name)
-            keys.where(user: name).order(:id).all.map do |row|
+            name = found!(name)
+            @store.all(:user_keys, order: [:id], user: name).map do |row|
                 Key.new(**Stamp.times(row.slice(*Key.members), :created_at))
             end
         end
 
         def unkey(name, id)
-            gone = keys.where(user: name.to_s, id: Integer(id)).delete
+            gone = @store.delete(:user_keys, user: name.to_s, id: Integer(id))
             raise Error, "#{name} has no key #{id}" if gone.zero?
         rescue ArgumentError
             raise Error, "a key's id is a number: #{id}"
@@ -139,34 +123,44 @@ module Sesam
         # Whose key `secret` is, or nil.
         def key_owner(secret)
             return nil if secret.to_s.empty?
-            keys.where(digest: digest(secret)).get(:user)
+            get(:user_keys, :user, digest: digest(secret))
         end
 
         private
 
-        # What an unknown name is checked against, so that it takes the
-        # time a known one does.
-        DECOY = Password.digest("not a password, ever")
-        private_constant :DECOY
-
-        def row_of(row, now) # rubocop:disable Metrics/AbcSize
+        def row_of(row, now)
             name = row[:name]
             Row.new(**Stamp.times(row.slice(:name, :created_at), :created_at),
                     password: !row[:password].nil?,
-                    keys: keys.where(user: name).count,
-                    passkeys: @db[:passkeys].where(user: name).count,
-                    invite: Stamp.time(open_invites(name, now)
-                                       .get(:expires_at)),
+                    keys: @store.count(:user_keys, user: name),
+                    passkeys: @store.count(:passkeys, user: name),
+                    invite: Stamp.time(open_invites(name, now).first
+                                       &.[](:expires_at)),
                     addresses: addresses_of(name))
         end
 
+        # No user's name is `name` whatever its case; checked in the
+        # transaction that adds it, so of two adding it at once one is
+        # refused (a store need not hold a key on the name).
+        def free!(name)
+            taken = @store.all(:users).map { it[:name] }
+                          .find { it.downcase == name.downcase }
+            raise Error, "user #{taken} exists already" if taken
+        end
+
+        # `name` as the String it is kept as; Error for no such user. A
+        # Symbol written as it is would match nothing in a file, and name
+        # a column in SQL.
         def found!(name)
             raise Error, "no user #{name}" unless exists?(name)
+            name.to_s
         end
 
         def digest(secret) = OpenSSL::Digest.hexdigest("SHA256", secret.to_s)
 
-        def users = @db[:users]
-        def keys = @db[:user_keys]
+        # `column` of the first row `equal` matches, nil for none.
+        def get(table, column, **equal)
+            @store.first(table, **equal)&.[](column)
+        end
     end
 end

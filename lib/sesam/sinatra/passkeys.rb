@@ -101,16 +101,16 @@ module Sesam
                 end
 
                 def passkey_keys
-                    sesam.database { yield sesam.passkeys_in(it) }
+                    sesam.store { yield sesam.passkeys_in(it) }
                 end
 
                 # The block's change to `name`'s passkeys, told the
                 # application in its transaction.
                 def passkey_written(name)
-                    sesam.database do |db|
-                        db.transaction do
-                            result = yield sesam.passkeys_in(db)
-                            sesam_changed(name, db)
+                    sesam.store do |store|
+                        store.transaction do
+                            result = yield sesam.passkeys_in(store)
+                            sesam_changed(name, store)
                             result
                         end
                     end

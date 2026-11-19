@@ -13,8 +13,8 @@ class ResetTest < Minitest::Test
     def setup
         super
         @client = WebAuthn::FakeClient.new(ORIGIN)
-        Sesam::Passkeys.new(@db).add("alice", id: "old", public_key: "pk",
-                                              sign_count: 0, label: "lost")
+        Sesam::Passkeys.new(@store).add("alice", id: "old", public_key: "pk",
+                                                 sign_count: 0, label: "lost")
     end
 
     def test_keep_ends_the_sessions_and_keeps_the_passkeys
@@ -38,7 +38,7 @@ class ResetTest < Minitest::Test
         made = @client.create(challenge: reply.dig("data", "challenge"))
         assert_equal 201, call(:post, "/session/invite/passkey",
                                { token:, credential: made })
-        ids = Sesam::Passkeys.new(@db).of("alice").map(&:id)
+        ids = Sesam::Passkeys.new(@store).of("alice").map(&:id)
         assert_equal 1, ids.size
         refute_includes ids, "old"
     end
@@ -56,7 +56,7 @@ class ResetTest < Minitest::Test
             call(:post, "/session/invite", { token:, password: "z" * 12 })
         end
         [users.session_valid?("alice", issued),
-         Sesam::Passkeys.new(@db).of("alice").map(&:id)]
+         Sesam::Passkeys.new(@store).of("alice").map(&:id)]
     end
 
     # When the browser's session was given.

@@ -11,7 +11,7 @@ require "sesam/sinatra"
 require "forwardable"
 require "webauthn/fake_client"
 
-# What the gate's and the routes' tests share: a database holding alice
+# What the gate's and the routes' tests share: a store holding alice
 # and bruno, each with their key (ALICE, BRUNO); addresses from the
 # documentation ranges (RFC 5737) and names under example.org; and an
 # application as small as sesam allows, whose hooks write down what they
@@ -29,29 +29,29 @@ module WebSupport
     PASSWORD = "a long enough password"
 
     def setup
-        @db = Sequel.sqlite
-        Sesam.migrate(@db)
+        @store = TestStore.fresh
         { "alice" => ALICE, "bruno" => BRUNO }.each { keyed(*it) }
         @told = []
         @profiles = {}
     end
 
-    def users = Sesam::Users.new(@db)
+    def users = Sesam::Users.new(@store)
 
     # `name` added, with `key` as theirs: put in as Users#key keeps one
     # (its digest), since that makes up its own.
     def keyed(name, key)
         users.add(name)
-        @db[:user_keys].insert(
-            user: name, digest: OpenSSL::Digest.hexdigest("SHA256", key),
-            created_at: Sesam::Stamp.ms(Time.now)
+        @store.insert(
+            :user_keys,
+            { user: name, digest: OpenSSL::Digest.hexdigest("SHA256", key),
+              created_at: Sesam::Stamp.ms(Time.now) }
         )
     end
 
     # The LAN this suite trusts: loopback and 192.0.2.0/24.
     def settings(**given)
         Sesam::Settings.new(
-            database: ->(&block) { block.call(@db) }, app: "app",
+            store: ->(&block) { block.call(@store) }, app: "app",
             lan: ["127.0.0.0/8", "192.0.2.0/24"], session:,
             passkey: Sesam::Passkey.new(ORIGIN), **given
         )
@@ -126,8 +126,8 @@ module WebSupport
         end
 
         def self.hooks(app, told, profiles)
-            app.define_method(:sesam_changed) do |name, db|
-                told << [:changed, name, db.in_transaction?]
+            app.define_method(:sesam_changed) do |name, store|
+                told << [:changed, name, store.in_transaction?]
             end
             app.define_method(:sesam_notify) do |name, kind|
                 told << [:notify, name, kind]
@@ -142,8 +142,8 @@ module WebSupport
             app.define_method(:sesam_named) do |text|
                 profiles.find { |_, profile| profile[:email] == text }&.first
             end
-            app.define_method(:sesam_asked) do |name, db|
-                told << [:asked, name, db.in_transaction?]
+            app.define_method(:sesam_asked) do |name, store|
+                told << [:asked, name, store.in_transaction?]
             end
             app.define_method(:sesam_reached?) do |name, token|
                 told << [:invited, name, token]

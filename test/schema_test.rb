@@ -35,7 +35,7 @@ class SchemaTest < Minitest::Test
     def test_migrating_twice_changes_nothing
         db = Sequel.sqlite
         Sesam.migrate(db)
-        Sesam::Users.new(db).add("alice")
+        Sesam::Users.new(Sesam::SequelStore.new(db)).add("alice")
         Sesam.migrate(db)
         assert_equal ["alice"], db[:users].select_map(:name)
     end

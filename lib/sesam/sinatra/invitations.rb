@@ -44,8 +44,8 @@ module Sesam
                 def invitation_redeem
                     passwords!
                     password = new_password
-                    name = redeemed do |db, user|
-                        sesam.users_in(db).password!(user, password)
+                    name = redeemed do |store, user|
+                        sesam.users_in(store).password!(user, password)
                     end
                     sesam_notify(name, :password)
                     answer({ name: })
@@ -80,9 +80,9 @@ module Sesam
                 # The invitation spent on the passkey the answer registers;
                 # its user.
                 def invited_registration(credential, label)
-                    redeemed do |db, user|
+                    redeemed do |store, user|
                         passkey!.register!(user, credential, recalled!,
-                                           sesam.passkeys_in(db), label:)
+                                           sesam.passkeys_in(store), label:)
                     end
                 end
 
@@ -94,7 +94,7 @@ module Sesam
                     invite || closed!
                 end
 
-                # Spends the invitation, the block (given the database and
+                # Spends the invitation, the block (given the store and
                 # its user) in the same transaction, after the passkeys
                 # they had are dropped where reset_passkeys says: their
                 # other sessions end (but drop_keep_sessions), and the
@@ -102,10 +102,10 @@ module Sesam
                 # (a password too short), a 422.
                 def redeemed
                     lookup_throttled!
-                    name = sesam.database do |db|
-                        users = sesam.users_in(db)
+                    name = sesam.store do |store|
+                        users = sesam.users_in(store)
                         users.redeem(token) do |user|
-                            spend(db, users, user) { yield db, user }
+                            spend(store, users, user) { yield store, user }
                         end
                     end
                     name || closed!
@@ -113,10 +113,10 @@ module Sesam
                     refuse(422, e.message)
                 end
 
-                def spend(db, users, user, &)
+                def spend(store, users, user, &)
                     mode = sesam.reset_passkeys
-                    sesam.passkeys_in(db).clear(user) unless mode == "keep"
-                    reset!(db, users, user,
+                    sesam.passkeys_in(store).clear(user) unless mode == "keep"
+                    reset!(store, users, user,
                            sessions: mode != "drop_keep_sessions", &)
                 end
 

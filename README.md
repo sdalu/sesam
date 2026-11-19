@@ -35,13 +35,15 @@ are optional.
        └────────────────┬───────────────┘
                         │
                         ▼
-     ┌──────────────────┴─────────────────┐
-     │ the application's database         │
-     │                                    │
-     │ users · user_keys · user_addresses │
-     │ invites · passkeys                 │
-     │ sesam_schema (version)             │
-     └────────────────────────────────────┘
+     ┌──────────────────┴──────────────────────┐
+     │ a store                                 │
+     │                                         │
+     │ SequelStore: the application's database │
+     │ JsonStore: a JSON file of its own       │
+     │                                         │
+     │ users · user_keys · user_addresses      │
+     │ invites · passkeys                      │
+     └─────────────────────────────────────────┘
 ```
 
 - [At a glance](#at-a-glance)
@@ -64,14 +66,17 @@ are optional.
 - `Sesam::Forwarded`: the `for` of each hop of a Forwarded header (RFC
   7239), as an address
 - `Sesam::Throttle`: failures counted per key over a window, in memory
-- `Sesam::Users`: users by name in a Sequel database: passwords, API
+- `Sesam::SequelStore`, `Sesam::JsonStore`: where users and passkeys
+  are kept: the application's Sequel database, or a JSON file of
+  their own; either answers the same calls
+- `Sesam::Users`: users by name in a store: passwords, API
   keys, single-use invitations, the LAN addresses each is known at, the
   moment their sessions were ended
 - `Sesam::Passkeys`: each user's passkeys: the public half of a key
   pair, by credential id
 - `Sesam::Passkey`: the WebAuthn ceremonies, registering and signing in
   (`require "sesam/passkey"`, with the `webauthn` gem)
-- `Sesam::Settings`: what the application tells sesam: its database,
+- `Sesam::Settings`: what the application tells sesam: its store,
   networks, what it accepts, its Session and Passkey
 - `Sesam::Access`: who is calling: a user by key or session, the LAN,
   the application itself, or refused
@@ -173,7 +178,9 @@ throttle.clear!("try:alice@192.0.2.7")
 ```ruby
 db = Sequel.sqlite("app.db")
 Sesam.migrate(db)            # sesam's tables, before the application's
-users = Sesam::Users.new(db, reserved: %w[root])
+store = Sesam::SequelStore.new(db)
+# or, with no database: store = Sesam::JsonStore.new("users.json")
+users = Sesam::Users.new(store, reserved: %w[root])
 
 users.add("alice")
 token = users.invite("alice")          # shown once; its digest kept
@@ -186,12 +193,36 @@ users.address!("alice", "192.0.2.7")   # a LAN caller named, not proved
 users.end_sessions!("alice")           # sessions given before end
 users.session_valid?("alice", held.issued)
 users.remove("alice")                  # their ways in go with them
-Sesam::Passkeys.new(db).clear("bob")   # a lost device: every passkey
+Sesam::Passkeys.new(store).clear("bob")  # a lost device: every passkey
 ```
 
-`Sesam.migrate` keeps its own version (`sesam_schema`), apart from
-the application's migrations, and refuses a database newer than this
-sesam. Its tables are `users` (`name`, `password`, `sessions_since`,
+Users and Passkeys take a store, never a database given bare (an
+`Error` naming `SequelStore`). Both stores answer `all`, `first`,
+`count`, `insert`, `update`, `delete`, `transaction`, `rollback!` and
+`in_transaction?` alike (lib/sesam/store.rb): a transaction opened
+inside another joins it, and a `rollback!` anywhere in it undoes the
+whole, which answers nil. A user removed takes their keys,
+invitations, addresses and passkeys along in Users itself, as a file
+has no foreign keys.
+
+`Sesam::JsonStore.new(path)` keeps the five tables as one JSON
+document, made at the first write (mode 0600; a rewrite keeps the
+file's mode, and its owner when written by root), its lock file
+`PATH.lock` at the first use. A symlinked path is resolved once, so
+writes reach its target. Each transaction reads the document fresh
+under an exclusive lock on `PATH.lock`, and writes it whole only if
+something changed: to a temporary file, synced, renamed over it, so
+an interrupted write leaves the old one. A block left early (`return`,
+`break`, `throw`) keeps its writes, as on Sequel; an exception keeps
+none. Text JSON cannot hold (not UTF-8) is refused, an `Error`,
+nothing written. Its `"sesam"` is the document's format, refused when
+newer than this sesam's. One process keeps one JsonStore per file:
+two on the same file, one used inside the other's transaction, wait
+for each other forever. Its limits are in the known shortfalls.
+
+On Sequel, `Sesam.migrate` keeps its own version (`sesam_schema`),
+apart from the application's migrations, and refuses a database newer
+than this sesam. Its tables are `users` (`name`, `password`, `sessions_since`,
 `created_at`), `user_keys`, `invites`, `user_addresses` and
 `passkeys`, each made only where missing. Anything else the
 application knows of a person (names, an email address) goes in a
@@ -223,7 +254,7 @@ require "sesam/passkey"   # needs the webauthn gem
 
 passkey = Sesam::Passkey.new("https://app.example.org",
                              name: "App", handle: "app/")
-keys = Sesam::Passkeys.new(db)
+keys = Sesam::Passkeys.new(store)
 
 options = passkey.registration_for("alice", keys)  # to the browser
 # ... navigator.credentials.create answers `credential`
@@ -280,7 +311,7 @@ credential that is not right, and `register!` raises `WebAuthn::Error`.
 
 ```ruby
 SESAM = Sesam::Settings.new(
-    database: ->(&block) { block.call(db) },  # yields a Sequel database
+    store: Sesam::SequelStore.new(db),  # or a callable yielding a store
     lan: ["192.0.2.0/24"], proxies: ["127.0.0.1"],
     accept: %w[key passkey password], mount: "/app",
     session:, passkey:, reserved: %w[root], app: "app"
@@ -323,7 +354,9 @@ sign-in screen (`POST /session/recover`, false by default), the link
 lasting `recovery_for` seconds (an hour).
 
 A setting not in `Settings::DEFAULTS` is refused, as are networks that
-do not parse, a passkey without a session, and `accept` empty or
+do not parse, a passkey without a session, a `store` that is neither a
+store nor a callable yielding one (a database given bare among them),
+and `accept` empty or
 naming anything but `key`, `passkey` and `password`. A passkey given
 while passkeys are not accepted is dropped. The caller is, in order:
 the user a Bearer key or a session names (a key only where `key` is
@@ -453,8 +486,9 @@ registering sesam; sesam's own fills only what is missing:
   transaction commits it.
 - `parsed_body`: reading a body; by default the JSON object; 415 for a
   body not said `application/json`, 422 for one that is no object.
-- `sesam_changed(name, db)`: in the transaction where a user's way in
-  changed; by default nothing.
+- `sesam_changed(name, store)`: in the store's transaction where a
+  user's way in changed; on a SequelStore, `store.db` writes in it
+  (an audit row); by default nothing.
 - `sesam_notify(name, kind)`: after it, `:password` or `:passkey`; by
   default nothing.
 - `sesam_profile(name)`: merged into `GET /session` and the invitation
@@ -464,8 +498,8 @@ registering sesam; sesam's own fills only what is missing:
   login (an email address); by default `nil`.
 - `sesam_reached?(name, token)`: a link asked for: hand the invitation
   over (mail it); false keeps none; by default `false`.
-- `sesam_asked(name, db)`: a link handed to `name`, in the invitation's
-  transaction in `db`; by default nothing.
+- `sesam_asked(name, store)`: a link handed to `name`, in the
+  invitation's transaction in `store`; by default nothing.
 
 These two run after the answer, on a thread of their own: a
 thread-local the application set for the request (who acts, for an
@@ -475,6 +509,18 @@ itself. A failure there is said on the server's output.
 ## Known shortfalls
 - A link asked for is mailed inside its invitation's transaction (kept
   only if it reached its user), so on SQLite other writers wait for the
-  mail, and fail past the busy timeout (Sequel's 5 s by default).
+  mail, and fail past the busy timeout (Sequel's 5 s by default); on a
+  JsonStore every request touching users waits for it, with no
+  timeout.
+- A JsonStore rewrites its whole file on each change and reads it
+  whole in each transaction: made for a household's users, not
+  thousands. Its lock holds between processes of one machine; a
+  network filesystem's locks are not to be trusted. An application's
+  own tables are not in its transactions, so a hook's audit row is
+  kept apart from the change.
+- On a database other than SQLite, two adding names that differ by
+  case alone at the same moment may both be let in: the check reads
+  before it writes, and only SQLite and a JsonStore run one
+  transaction at a time.
 - On MySQL, a passkey's credential id is `varchar(255)`, which an
   authenticator making longer ids would not fit.

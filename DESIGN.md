@@ -89,6 +89,36 @@ digest tells a guesser nothing a guess would not. Names an
 application keeps for itself (an audit's `root`) are given, not
 built in.
 
+## Two stores, one set of calls
+
+A tool for one household need not run a database to sign its users
+in, so the tables sit behind a store: the application's Sequel
+database (SequelStore) or a JSON file of their own (JsonStore), both
+answering the calls of lib/sesam/store.rb, and the suite runs once on
+each. The calls match by equality alone, anything else (a name's
+case, an invitation's expiry) filtered in Ruby: the tables hold a
+household's rows, and a richer query language is a second database
+engine to keep honest. A transaction inside another joins it, as
+Sequel's do, and a rollback undoes the whole: a change is kept whole
+or not at all, and savepoints would let half of one stand. A block
+left early (return, break, throw) keeps its writes on both, as
+Sequel's does: one rule for both stores, the refusals raising. A store
+holds no keys and does not cascade: Users and Passkeys check that a
+name is free, or that a user exists, in the transaction that writes,
+where one process at a time runs, and Users removes what was a
+user's itself, the same on either.
+
+JsonStore is one document rewritten whole, not a log appended to: at a
+household's size the rewrite costs nothing, while a log needs
+tombstones for what is deleted (a spent invitation, a passkey gone)
+and a compaction to bound it. Not JSON with comments either: sesam
+writes the file whenever a passkey's counter moves at sign-in, and a
+comment would be gone at the first. The lock is a file beside it,
+since the document is replaced by rename and a lock on it would stay
+with the old one; each transaction reads the document afresh under it,
+as another process may have written. The file holds password hashes
+and key digests, so it is made readable by its owner alone.
+
 ## Passkeys: an optional require
 
 `sesam/passkey` is loaded on its own, and `webauthn` (with its CBOR
@@ -120,16 +150,15 @@ and the routes read, built once; an unknown key in it is refused
 rather than ignored, a typo being a setting silently left at its
 default.
 
-sesam reaches users through a callable yielding a Sequel database:
-the application decides how it opens and locks its database, and
-sesam builds Users and Passkeys on what it is given, with the
-reserved names. The application's part of a change (an audit row)
-needs the request, so it is a helper (`sesam_changed`), not a
-callable in the settings, and it runs inside the change's transaction
-so that one is kept only with the other. A profile (`sesam_profile`)
-is merged beside sesam's answer and never over it: one naming a key
-of sesam's raises, since a display name answered as `name` would
-pass for the login.
+sesam reaches users through a store, or a callable yielding one: the
+application decides how it opens and locks it, and sesam builds Users
+and Passkeys on what it is given, with the reserved names. The
+application's part of a change (an audit row) needs the request, so it
+is a helper (`sesam_changed`), not a callable in the settings, and it
+runs inside the change's transaction so that one is kept only with the
+other. A profile (`sesam_profile`) is merged beside sesam's answer and
+never over it: one naming a key of sesam's raises, since a display
+name answered as `name` would pass for the login.
 
 An application's helpers are its own: sesam fills only the ones it
 lacks, whichever is registered first, so an API with its own
@@ -144,7 +173,7 @@ own requests; the cookies' names are the Session's.
 ## A refusal raises, and a write states its origin
 
 A refusal is an exception (`Refused`), not Sinatra's `halt`: a halt is
-a throw, and Sequel commits a transaction a throw leaves, so an
+a throw, and a store commits a transaction a throw leaves, so an
 invitation spent inside one would stay spent behind a 422. An
 application's own `refuse` must raise as well.
 

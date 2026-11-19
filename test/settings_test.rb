@@ -7,9 +7,9 @@ require "test_helper"
 # What an application tells sesam, refused when no gate could work
 # with it.
 class SettingsTest < Minitest::Test
-    DB = ->(&block) { block.call(Sequel.sqlite) }
+    STORE = ->(&block) { block.call(TestStore.fresh) }
 
-    def settings(**) = Sesam::Settings.new(database: DB, **)
+    def settings(**) = Sesam::Settings.new(store: STORE, **)
 
     def test_the_names_follow_the_application
         app = settings(app: "climat")
@@ -41,8 +41,15 @@ class SettingsTest < Minitest::Test
         assert_match(/lna/, error.message)
     end
 
-    def test_a_database_is_a_callable
-        assert_raises(Sesam::Settings::Error) { Sesam::Settings.new(database: 1) }
+    # A store, or a callable yielding one; anything else refused.
+    def test_a_store_is_a_store_or_a_callable
+        store = Sesam::SequelStore.new(Sequel.sqlite)
+        Sesam::Settings.new(store:).store { assert_same store, it }
+        [1, "store", Object.new, Sequel.sqlite].each do |store|
+            assert_raises(Sesam::Settings::Error) do
+                Sesam::Settings.new(store:)
+            end
+        end
     end
 
     def test_what_is_accepted

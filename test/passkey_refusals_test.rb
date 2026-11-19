@@ -52,12 +52,13 @@ class PasskeyRefusalsTest < Minitest::Test
     def test_another_user_s_credential_id_is_refused
         signed_in_as_alice
         register(@client)
-        alice = @db[:passkeys].get(:id)
+        alice = @store.first(:passkeys)[:id]
         clear_cookies
         users.password!("bruno", PASSWORD)
         call(:post, "/session/password", { name: "bruno", password: PASSWORD })
         assert_equal 422, register(impostor(alice))
-        assert_equal [[alice, "alice"]], @db[:passkeys].select_map(%i[id user])
+        kept = @store.all(:passkeys).map { it.values_at(:id, :user) }
+        assert_equal [[alice, "alice"]], kept
     end
 
     def test_client_data_that_is_no_json_is_refused

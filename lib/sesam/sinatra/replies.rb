@@ -60,9 +60,9 @@ module Sesam
 
         # What the application is told, where it says nothing: nothing.
         module Hooks
-            # A user's way in changed, in `db`'s transaction: a password
+            # A user's way in changed, in `store`'s transaction: a password
             # set, a passkey registered or removed, an invitation spent.
-            def sesam_changed(_name, _db) = nil
+            def sesam_changed(_name, _store) = nil
 
             # After it: kind, :password or :passkey set for `name`.
             def sesam_notify(_name, _kind) = nil
@@ -83,8 +83,8 @@ module Sesam
             def sesam_reached?(_name, _token) = false
 
             # A link asked for and handed to `name`, in the invitation's
-            # transaction in `db` (an audit row, the caller's).
-            def sesam_asked(_name, _db) = nil
+            # transaction in `store` (an audit row, the caller's).
+            def sesam_asked(_name, _store) = nil
         end
     end
 end
